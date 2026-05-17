@@ -25,6 +25,7 @@ import {
 } from "../../handlers/Public/cms";
 import { getPublicSiteSettings } from "../../handlers/Public/siteSettings";
 import { recordProfessionalView } from "../../handlers/Public/profileView";
+import { recordServiceView } from "../../handlers/Public/serviceView";
 
 // Public routes - accessible without authentication
 const publicRouter = Router();
@@ -82,6 +83,11 @@ publicRouter
 publicRouter
   .route("/professionals/:id/view")
   .post(schedulingRateLimiter, recordProfessionalView);
+
+// Service-page view tracking (public, rate-limited, dedup per visitor/day)
+publicRouter
+  .route("/services/:serviceId/view")
+  .post(schedulingRateLimiter, recordServiceView);
 
 // Public favorite counts (social proof)
 publicRouter

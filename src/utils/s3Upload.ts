@@ -148,6 +148,29 @@ export const uploadToS3 = async (
   }
 };
 
+// Upload an arbitrary buffer to S3 (used for generated reports, PDFs, etc.)
+export const uploadBufferToS3 = async (
+  buffer: Buffer,
+  key: string,
+  contentType: string,
+  contentDisposition: string = 'inline'
+): Promise<string> => {
+  try {
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      ContentDisposition: contentDisposition,
+    });
+    await s3Client.send(command);
+    return `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+  } catch (error) {
+    console.error('S3 buffer upload failed:', error);
+    throw new Error('Failed to upload buffer to S3');
+  }
+};
+
 // Delete file from S3
 export const deleteFromS3 = async (key: string): Promise<void> => {
   try {

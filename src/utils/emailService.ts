@@ -2278,3 +2278,35 @@ export const sendDisputeSlaBreachedEmail = async (params: {
   });
 };
 
+export const sendKpiReportEmail = async (
+  adminEmail: string,
+  params: { from: Date; to: Date; reportUrl?: string; error?: string }
+): Promise<boolean> => {
+  const { from, to, reportUrl, error } = params;
+  const rangeLabel = `${from.toISOString().slice(0, 10)} – ${to.toISOString().slice(0, 10)}`;
+  const isError = !reportUrl;
+  const subject = isError
+    ? `KPI Report Failed (${rangeLabel}) - Fixera Admin`
+    : `KPI Report Ready (${rangeLabel}) - Fixera Admin`;
+  const body = isError
+    ? `<p style="color: #666; line-height: 1.6;">We were unable to generate your KPI report for <strong>${escapeHtml(rangeLabel)}</strong>.</p>
+       <p style="color: #666; line-height: 1.6;">Error: ${escapeHtml(error || 'Unknown error')}</p>
+       <p style="color: #666; line-height: 1.6;">Please retry from the admin dashboard or contact engineering if the issue persists.</p>`
+    : `<p style="color: #666; line-height: 1.6;">Your KPI report for <strong>${escapeHtml(rangeLabel)}</strong> is ready.</p>
+       ${buildEmailButton(reportUrl!, 'Download Report')}
+       <p style="color: #999; font-size: 12px; line-height: 1.6;">If the button doesn't work, copy this link: ${escapeHtml(reportUrl!)}</p>`;
+  const content = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      ${getEmailHeader(isError ? 'KPI Report Failed' : 'KPI Report Ready')}
+      <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #333; margin: 0 0 20px 0;">Fixera KPI Report</h2>
+        ${body}
+        ${getEmailFooter()}
+      </div>
+    </div>
+  `;
+  return sendEmail(adminEmail, subject, content, {
+    template: isError ? 'kpi_report_failed' : 'kpi_report_ready',
+  });
+};
+

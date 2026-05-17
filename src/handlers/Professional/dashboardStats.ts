@@ -4,6 +4,7 @@ import Booking from '../../models/booking';
 import Favorite from '../../models/favorite';
 import WarrantyClaim from '../../models/warrantyClaim';
 import ProfileView from '../../models/profileView';
+import { escapeCsv } from '../../utils/csv';
 
 type RangeKey = 'month' | '3months' | '12months' | 'all';
 
@@ -340,18 +341,6 @@ export const getProfessionalDashboardStats = async (req: Request, res: Response)
       error: { code: 'SERVER_ERROR', message: 'Failed to fetch dashboard stats' },
     });
   }
-};
-
-const escapeCsv = (value: unknown): string => {
-  if (value === null || value === undefined) return '';
-  let str = String(value);
-  if (/^[=+\-@\t\r]/.test(str)) {
-    str = `'${str}`;
-  }
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 };
 
 export const getProfessionalDashboardBookings = async (req: Request, res: Response) => {

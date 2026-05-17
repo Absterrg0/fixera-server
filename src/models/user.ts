@@ -748,6 +748,7 @@ UserSchema.index({ hourlyRate: 1 });
 UserSchema.index({ customerType: 1 });
 UserSchema.index({ 'location.coordinates': '2dsphere' }); // Geospatial index for location-based queries
 UserSchema.index({ 'location.city': 1, 'location.country': 1 });
+UserSchema.index({ role: 1, 'location.city': 1, createdAt: 1 });
 // Stripe Connect indexes
 UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ 'stripe.accountId': 1 }, { unique: true, sparse: true });
