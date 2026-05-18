@@ -6,6 +6,7 @@ import { sendProfessionalApprovalEmail, sendProfessionalIdChangeApprovalEmail, s
 import { deleteFromS3, getPresignedUrl, parseS3KeyFromUrl, presignS3Url } from "../../utils/s3Upload";
 import mongoose from 'mongoose';
 import { normalizePendingOldValue } from "../../utils/pendingIdChanges";
+import { auditLog } from "../../utils/auditLogger";
 
 const getS3KeyFromValue = (value?: string): string | null => {
   if (!value) return null;
@@ -271,6 +272,11 @@ export const approveProfessional = async (req: Request, res: Response, next: Nex
       });
     }
 
+    const beforeSnapshot = {
+      professionalStatus: professional.professionalStatus,
+      accountStatus: professional.accountStatus,
+    };
+
     // Update professional status
     professional.professionalStatus = 'approved';
     professional.accountStatus = 'active';
@@ -286,6 +292,21 @@ export const approveProfessional = async (req: Request, res: Response, next: Nex
     } catch (emailError) {
       console.error(`📧 PHASE 1: Failed to send approval email to ${professional.email}:`, emailError);
     }
+
+    await auditLog({
+      req,
+      action: 'admin.professionals.approve',
+      targetType: 'User',
+      targetId: professional._id as mongoose.Types.ObjectId,
+      details: {
+        before: beforeSnapshot,
+        after: { professionalStatus: 'approved', accountStatus: 'active' },
+        professionalEmail: professional.email,
+      },
+      status: 'success',
+      statusCode: 200,
+    });
+
     return res.status(200).json({
       success: true,
       msg: "Professional approved successfully",
@@ -338,6 +359,11 @@ export const rejectProfessional = async (req: Request, res: Response, next: Next
       });
     }
 
+    const beforeSnapshot = {
+      professionalStatus: professional.professionalStatus,
+      accountStatus: professional.accountStatus,
+    };
+
     // Update professional status
     professional.professionalStatus = 'rejected';
     professional.accountStatus = 'rejected';
@@ -354,6 +380,21 @@ export const rejectProfessional = async (req: Request, res: Response, next: Next
       console.error(`📧 PHASE 1: Failed to send rejection email to ${professional.email}:`, emailError);
       // Don't fail the rejection if email fails
     }
+
+    await auditLog({
+      req,
+      action: 'admin.professionals.reject',
+      targetType: 'User',
+      targetId: professional._id as mongoose.Types.ObjectId,
+      details: {
+        before: beforeSnapshot,
+        after: { professionalStatus: 'rejected', accountStatus: 'rejected' },
+        rejectionReason: reason.trim(),
+        professionalEmail: professional.email,
+      },
+      status: 'success',
+      statusCode: 200,
+    });
 
     return res.status(200).json({
       success: true,
@@ -406,6 +447,11 @@ export const suspendProfessional = async (req: Request, res: Response, next: Nex
       });
     }
 
+    const beforeSnapshot = {
+      professionalStatus: professional.professionalStatus,
+      accountStatus: professional.accountStatus,
+    };
+
     // Update professional status
     if (professional.professionalStatus !== 'suspended' && !professional.previousProfessionalStatus) {
       professional.previousProfessionalStatus = professional.professionalStatus as any;
@@ -425,6 +471,21 @@ export const suspendProfessional = async (req: Request, res: Response, next: Nex
     }
 
     console.log(`⏸️ Admin: Professional ${professional.email} suspended by ${adminUser.email}`);
+
+    await auditLog({
+      req,
+      action: 'admin.professionals.suspend',
+      targetType: 'User',
+      targetId: professional._id as mongoose.Types.ObjectId,
+      details: {
+        before: beforeSnapshot,
+        after: { professionalStatus: 'suspended', accountStatus: 'suspended' },
+        suspensionReason: reason.trim(),
+        professionalEmail: professional.email,
+      },
+      status: 'success',
+      statusCode: 200,
+    });
 
     return res.status(200).json({
       success: true,
@@ -476,6 +537,11 @@ export const reactivateProfessional = async (req: Request, res: Response, next: 
       });
     }
 
+    const beforeSnapshot = {
+      professionalStatus: professional.professionalStatus,
+      accountStatus: professional.accountStatus,
+    };
+
     // Restore professional status from the pre-suspension snapshot when available
     professional.professionalStatus = (professional.previousProfessionalStatus as any) || 'approved';
     professional.previousProfessionalStatus = undefined;
@@ -493,6 +559,20 @@ export const reactivateProfessional = async (req: Request, res: Response, next: 
     }
 
     console.log(`▶️ Admin: Professional ${professional.email} reactivated by ${adminUser.email}`);
+
+    await auditLog({
+      req,
+      action: 'admin.professionals.reactivate',
+      targetType: 'User',
+      targetId: professional._id as mongoose.Types.ObjectId,
+      details: {
+        before: beforeSnapshot,
+        after: { professionalStatus: professional.professionalStatus, accountStatus: 'active' },
+        professionalEmail: professional.email,
+      },
+      status: 'success',
+      statusCode: 200,
+    });
 
     return res.status(200).json({
       success: true,

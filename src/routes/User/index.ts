@@ -40,6 +40,8 @@ import {
 import { validateAddress, getGoogleMapsConfig } from "../../handlers/User/googleMaps";
 import { getReferralStats, generateUserReferralCode, addLateReferralCode } from "../../handlers/User/referralManagement";
 import { getProfessionalFavoriteStats, dismissFavoriteNotifications } from "../../handlers/Favorites";
+import { exportMyData } from "../../handlers/User/dataExport";
+import { deleteMyAccount } from "../../handlers/User/accountManagement";
 
 const userRouter = Router();
 
@@ -137,6 +139,10 @@ userRouter.route("/google-maps-config").get(getGoogleMapsConfig)
 // Professional favorites stats + in-app notification dismissal
 userRouter.route("/professional/favorites-stats").get(getProfessionalFavoriteStats)
 userRouter.route("/professional/favorites-notifications/seen").post(dismissFavoriteNotifications)
+
+// GDPR — data export and account deletion (right-to-be-forgotten)
+userRouter.route("/me/export").get(exportMyData)
+userRouter.route("/me/account").delete(deleteMyAccount)
 
 // Platform commission (read-only for professionals)
 userRouter.route("/commission-rate").get(async (req, res) => {

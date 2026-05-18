@@ -13,8 +13,8 @@ import {
   markMilestonesCompleted,
 } from '../../utils/bookingHelpers';
 import { sendDisputeResolvedEmail } from '../../utils/emailService';
+import { auditLog } from '../../utils/auditLogger';
 
-const DISPUTE_BOOKING_STATES = ['dispute', 'in_dispute', 'under_review'] as const;
 const ACTIVE_DISPUTE_STATUS: BookingStatus = 'dispute';
 const COMPLETED_BOOKING_STATUS: BookingStatus = 'completed';
 
@@ -22,19 +22,14 @@ type DisputeResolutionAction = 'accept_professional' | 'reject_extra_costs' | 'a
 
 const buildDisputeFilter = (status?: string) => {
   if (status === 'resolved') {
-    return { status: COMPLETED_BOOKING_STATUS, 'dispute.resolvedAt': { $ne: null } };
+    return { 'dispute.raisedAt': { $exists: true }, 'dispute.resolvedAt': { $ne: null } };
   }
 
   if (status === 'open') {
-    return { status: ACTIVE_DISPUTE_STATUS, 'dispute.resolvedAt': null };
+    return { 'dispute.raisedAt': { $exists: true }, 'dispute.resolvedAt': null };
   }
 
-  return {
-    $or: [
-      { status: ACTIVE_DISPUTE_STATUS },
-      { status: COMPLETED_BOOKING_STATUS, 'dispute.resolvedAt': { $ne: null } },
-    ]
-  };
+  return { 'dispute.raisedAt': { $exists: true } };
 };
 
 const applyExtraCostUpdate = (
@@ -211,12 +206,12 @@ export const getDisputeDetails = async (req: Request, res: Response) => {
       });
     }
 
-    if (!DISPUTE_BOOKING_STATES.includes(String(booking.status) as typeof DISPUTE_BOOKING_STATES[number])) {
+    if (!booking.dispute?.raisedAt) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'BOOKING_NOT_IN_DISPUTE',
-          message: `Booking ${bookingId} is not in a dispute state`
+          message: `Booking ${bookingId} has no dispute record`
         }
       });
     }
@@ -283,6 +278,9 @@ export const resolveDispute = async (req: Request, res: Response) => {
         $set: {
           status: COMPLETED_BOOKING_STATUS,
           actualEndDate: completionDate,
+          'dispute.resolvedAt': completionDate,
+          'dispute.resolution': resolution,
+          'dispute.resolvedBy': adminUser._id,
         },
         $push: {
           statusHistory: {
@@ -305,12 +303,6 @@ export const resolveDispute = async (req: Request, res: Response) => {
           message: `Booking status changed to "${currentBooking?.status || booking.status}" before the dispute could be resolved`
         }
       });
-    }
-
-    if (resolvedBooking.dispute) {
-      resolvedBooking.dispute.resolvedAt = new Date();
-      resolvedBooking.dispute.resolution = resolution;
-      resolvedBooking.dispute.resolvedBy = adminUser._id;
     }
 
     const finalExtraCostAmount = applyExtraCostUpdate(
@@ -374,6 +366,23 @@ export const resolveDispute = async (req: Request, res: Response) => {
       console.error('Failed to send dispute-resolved email:', emailError?.message || emailError);
     }
 
+    await auditLog({
+      req,
+      action: 'admin.disputes.resolve',
+      targetType: 'Booking',
+      targetId: resolvedBooking._id,
+      details: {
+        action,
+        resolution,
+        adjustedAmount: typeof adjustedAmount === 'number' ? adjustedAmount : undefined,
+        finalExtraCostAmount,
+        before: { status: ACTIVE_DISPUTE_STATUS },
+        after: { status: COMPLETED_BOOKING_STATUS },
+      },
+      status: 'success',
+      statusCode: 200,
+    });
+
     return res.json({
       success: true,
       data: {
@@ -383,6 +392,15 @@ export const resolveDispute = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error resolving dispute:', error);
+    await auditLog({
+      req,
+      action: 'admin.disputes.resolve',
+      targetType: 'Booking',
+      targetId: req.params.bookingId,
+      status: 'failure',
+      statusCode: 500,
+      errorMessage: error?.message || 'unknown',
+    });
     return res.status(500).json({
       success: false,
       error: { code: 'SERVER_ERROR', message: 'Failed to resolve dispute' }
@@ -397,8 +415,8 @@ export const getDisputeAnalytics = async (_req: Request, res: Response) => {
       totalResolved,
       totalDisputes,
     ] = await Promise.all([
-      Booking.countDocuments({ status: ACTIVE_DISPUTE_STATUS, 'dispute.resolvedAt': null }),
-      Booking.countDocuments({ status: COMPLETED_BOOKING_STATUS, 'dispute.resolvedAt': { $ne: null } }),
+      Booking.countDocuments(buildDisputeFilter('open')),
+      Booking.countDocuments(buildDisputeFilter('resolved')),
       Booking.countDocuments(buildDisputeFilter()),
     ]);
 

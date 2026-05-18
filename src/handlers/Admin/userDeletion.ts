@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import User from "../../models/user";
 import { deleteUserData } from "../../utils/deleteUserData";
+import { auditLog } from "../../utils/auditLogger";
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
@@ -25,11 +26,38 @@ export const deleteUser = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, msg: "Cannot delete admin users" });
     }
 
+    const targetSnapshot = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      accountStatus: user.accountStatus,
+    };
+
     await deleteUserData(user._id);
+
+    await auditLog({
+      req,
+      action: 'admin.users.hard_delete',
+      targetType: 'User',
+      targetId: user._id,
+      details: { target: targetSnapshot },
+      status: 'success',
+      statusCode: 200,
+    });
 
     return res.status(200).json({ success: true, msg: `User ${user.email} and all associated data deleted` });
   } catch (error: any) {
     console.error("Delete user error:", error);
+    await auditLog({
+      req,
+      action: 'admin.users.hard_delete',
+      targetType: 'User',
+      targetId: req.params.userId,
+      status: 'failure',
+      statusCode: 500,
+      errorMessage: error?.message || 'unknown',
+    });
     return res.status(500).json({ success: false, msg: "Failed to delete user" });
   }
 };

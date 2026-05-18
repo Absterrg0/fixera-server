@@ -11,6 +11,7 @@ import {
   sendRefundProcessedEmail,
   sendRefundDeniedEmail,
 } from "../../utils/emailService";
+import { auditLog } from "../../utils/auditLogger";
 
 const VALID_STATUSES = ["pending", "processing", "approved", "denied"] as const;
 
@@ -218,12 +219,36 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
       console.error("Approve cancellation email error:", emailError?.message || emailError);
     }
 
+    await auditLog({
+      req,
+      action: 'admin.cancellation_requests.approve',
+      targetType: 'Booking',
+      targetId: freshBooking._id,
+      details: {
+        cancellationRequestId: cancellation._id,
+        reason: cancellation.reason,
+        refundAmount,
+        totalWithVat,
+      },
+      status: 'success',
+      statusCode: 200,
+    });
+
     return res.json({
       success: true,
       data: { cancellationRequest: cancellation, refundAmount },
     });
   } catch (error: any) {
     console.error("Approve cancellation request error:", error);
+    await auditLog({
+      req,
+      action: 'admin.cancellation_requests.approve',
+      targetType: 'CancellationRequest',
+      targetId: req.params.id,
+      status: 'failure',
+      statusCode: 500,
+      errorMessage: error?.message || 'unknown',
+    });
     return res.status(500).json({ success: false, msg: "Failed to approve cancellation" });
   }
 };
@@ -279,9 +304,31 @@ export const denyCancellationRequest = async (req: Request, res: Response) => {
       console.error("Deny cancellation email error:", emailError?.message || emailError);
     }
 
+    await auditLog({
+      req,
+      action: 'admin.cancellation_requests.deny',
+      targetType: 'CancellationRequest',
+      targetId: cancellation._id,
+      details: {
+        bookingId: String(cancellation.booking),
+        denyReason: denyReason.trim(),
+      },
+      status: 'success',
+      statusCode: 200,
+    });
+
     return res.json({ success: true, data: { cancellationRequest: cancellation } });
   } catch (error: any) {
     console.error("Deny cancellation request error:", error);
+    await auditLog({
+      req,
+      action: 'admin.cancellation_requests.deny',
+      targetType: 'CancellationRequest',
+      targetId: req.params.id,
+      status: 'failure',
+      statusCode: 500,
+      errorMessage: error?.message || 'unknown',
+    });
     return res.status(500).json({ success: false, msg: "Failed to deny cancellation" });
   }
 };

@@ -26,6 +26,7 @@ import PlatformSettings from '../../models/platformSettings';
 import { calculateAutoDiscount } from '../../utils/discountEngine';
 // deductPoints moved to webhook handler (handlePaymentIntentSucceeded)
 import { calculateDiscountedPayouts } from '../../utils/discountEngine';
+import { auditLog } from '../../utils/auditLogger';
 
 const extractParticipantIds = (booking: any, professionalOverride?: any) => {
   const customerId = (booking.customer as any)?._id || booking.customer;
@@ -1125,6 +1126,26 @@ export const refundPayment = async (req: Request, res: Response) => {
     }
 
     const result = await executeRefund(bookingId, { amount, reason });
+
+    if (user?.role === 'admin') {
+      await auditLog({
+        req,
+        action: 'admin.payment.refund',
+        targetType: 'Booking',
+        targetId: bookingId,
+        details: {
+          refundId: result.refundId,
+          amount: result.amount,
+          status: result.status,
+          refundSource: result.refundSource,
+          reason,
+          requestedAmount: typeof amount === 'number' ? amount : undefined,
+        },
+        status: 'success',
+        statusCode: 200,
+      });
+    }
+
     return res.json({
       success: true,
       data: {
@@ -1136,12 +1157,36 @@ export const refundPayment = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     if (error instanceof RefundError) {
+      const userRole = (req as any).user?.role;
+      if (userRole === 'admin') {
+        await auditLog({
+          req,
+          action: 'admin.payment.refund',
+          targetType: 'Booking',
+          targetId: req.body?.bookingId,
+          status: 'failure',
+          statusCode: error.httpStatus,
+          errorMessage: `${error.code}: ${error.message}`,
+        });
+      }
       return res.status(error.httpStatus).json({
         success: false,
         error: { code: error.code, message: error.message },
       });
     }
     console.error('Error processing refund:', error);
+    const userRole = (req as any).user?.role;
+    if (userRole === 'admin') {
+      await auditLog({
+        req,
+        action: 'admin.payment.refund',
+        targetType: 'Booking',
+        targetId: req.body?.bookingId,
+        status: 'failure',
+        statusCode: 500,
+        errorMessage: error?.message || 'unknown',
+      });
+    }
     res.status(500).json({
       success: false,
       error: { code: 'STRIPE_ERROR', message: 'Failed to refund payment' }
