@@ -337,6 +337,7 @@ export const ALLOWED_KEY_PREFIXES = [
   'warranty-claims/',
   'rfq-attachments/',
   'quotation-attachments/',
+  'completion-attachments/',
   'cms/',
 ];
 

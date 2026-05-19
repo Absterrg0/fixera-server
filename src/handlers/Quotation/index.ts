@@ -628,11 +628,9 @@ export const customerRespondToQuotation = async (req: Request, res: Response) =>
     }
 
     // Also populate legacy quote field for backward compat with payment system
-    const commissionPercent = await getSafeCommissionPercent()
     const baseAmount = currentVersion?.totalAmount || 0
-    const customerAmount = +(baseAmount * (1 + commissionPercent / 100)).toFixed(2)
     booking.quote = {
-      amount: customerAmount,
+      amount: baseAmount,
       currency: currentVersion?.currency || 'EUR',
       description: currentVersion?.description,
       validUntil: currentVersion?.validUntil,
