@@ -11,6 +11,7 @@ import {
   sendRefundProcessedEmail,
   sendRefundDeniedEmail,
 } from "../../utils/emailService";
+import { getProfessionalDisplayName } from "../../utils/displayName";
 import { auditLog } from "../../utils/auditLogger";
 
 const VALID_STATUSES = ["pending", "processing", "approved", "denied"] as const;
@@ -192,14 +193,14 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
     try {
       const [customerUser, professionalUser] = await Promise.all([
         freshBooking.customer ? User.findById(freshBooking.customer).select("email name").lean() : null,
-        freshBooking.professional ? User.findById(freshBooking.professional).select("email name").lean() : null,
+        freshBooking.professional ? User.findById(freshBooking.professional).select("email name businessInfo").lean() : null,
       ]);
       if (customerUser?.email && professionalUser?.email) {
         await sendBookingCancelledEmail(
           customerUser.email,
           professionalUser.email,
           customerUser.name || "Customer",
-          professionalUser.name || "Professional",
+          getProfessionalDisplayName(professionalUser),
           cancellation.reason,
           "admin",
           String(freshBooking._id)
@@ -281,7 +282,7 @@ export const denyCancellationRequest = async (req: Request, res: Response) => {
         },
       },
       { new: true }
-    ).populate("requestedBy", "email name");
+    ).populate("requestedBy", "email name businessInfo");
     if (!cancellation) {
       const existing = await CancellationRequest.findById(id).lean();
       if (!existing) {
@@ -293,9 +294,12 @@ export const denyCancellationRequest = async (req: Request, res: Response) => {
     try {
       const requester: any = cancellation.requestedBy;
       if (requester?.email) {
+        const requesterName = cancellation.requestedRole === "professional"
+          ? getProfessionalDisplayName(requester, "Professional")
+          : (requester.name || "Customer");
         await sendRefundDeniedEmail({
           requesterEmail: requester.email,
-          requesterName: requester.name || (cancellation.requestedRole === "customer" ? "Customer" : "Professional"),
+          requesterName,
           bookingId: String(cancellation.booking),
           denyReason: cancellation.denyReason || denyReason.trim(),
         });

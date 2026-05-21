@@ -339,6 +339,8 @@ export const ALLOWED_KEY_PREFIXES = [
   'quotation-attachments/',
   'completion-attachments/',
   'cms/',
+  'dispute-attachments/',
+  'dispute-resolutions/',
 ];
 
 export const isAllowedS3Url = (url: string): boolean => {

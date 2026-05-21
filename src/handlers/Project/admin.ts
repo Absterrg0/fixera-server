@@ -10,6 +10,7 @@ import {
     sendProjectDeactivatedEmail,
     sendProjectReactivatedEmail
 } from '../../utils/emailService';
+import { getProfessionalDisplayName } from '../../utils/displayName';
 import { getPresignedUrl, parseS3KeyFromUrl } from '../../utils/s3Upload';
 
 // Helper: presign all file URLs (certifications and attachments) for admin viewing
@@ -161,7 +162,7 @@ export const approveProject = async (req: Request, res: Response) => {
         if (professional && professional.email) {
             const emailSent = await sendProjectApprovalEmail(
                 professional.email,
-                professional.name || 'Professional',
+                getProfessionalDisplayName(professional),
                 project.title,
                 String(project._id)
             );
@@ -218,7 +219,7 @@ export const rejectProject = async (req: Request, res: Response) => {
         if (professional && professional.email) {
             const emailSent = await sendProjectRejectionEmail(
                 professional.email,
-                professional.name || 'Professional',
+                getProfessionalDisplayName(professional),
                 project.title,
                 feedback,
                 String(project._id)
@@ -272,7 +273,7 @@ export const deleteProjectByAdmin = async (req: Request, res: Response) => {
         if (professional && professional.email) {
             await sendProjectDeletedEmail(
                 professional.email,
-                professional.name || 'Professional',
+                getProfessionalDisplayName(professional),
                 projectTitle,
                 reason
             );
@@ -317,7 +318,7 @@ export const deactivateProject = async (req: Request, res: Response) => {
         if (professional && professional.email) {
             await sendProjectDeactivatedEmail(
                 professional.email,
-                professional.name || 'Professional',
+                getProfessionalDisplayName(professional),
                 project.title,
                 reason,
                 String(project._id)
@@ -358,7 +359,7 @@ export const reactivateProject = async (req: Request, res: Response) => {
         if (professional && professional.email) {
             await sendProjectReactivatedEmail(
                 professional.email,
-                professional.name || 'Professional',
+                getProfessionalDisplayName(professional),
                 project.title,
                 String(project._id)
             );

@@ -2,7 +2,16 @@ import { Request, Response } from 'express';
 import Booking, { BookingStatus, ExtraCostType } from '../../models/booking';
 import User from '../../models/user';
 import PlatformSettings from '../../models/platformSettings';
-import { uploadToS3, generateFileName, deleteFromS3 } from '../../utils/s3Upload';
+import {
+  uploadToS3,
+  generateFileName,
+  deleteFromS3,
+  isAllowedS3Url,
+  validateFile,
+  validateImageFileBuffer,
+  validateVideoFile,
+} from '../../utils/s3Upload';
+import { getProfessionalDisplayName } from '../../utils/displayName';
 import { captureAndTransferPayment } from '../Stripe/payment';
 import { stripe, STRIPE_CONFIG } from '../../services/stripe';
 import {
@@ -333,12 +342,12 @@ export const professionalCompleteBooking = async (req: Request, res: Response) =
 
     try {
       const customerUser = updatedBooking.customer ? await User.findById(updatedBooking.customer).select('email name').lean() : null;
-      const professionalUser = await User.findById(authUser._id).select('email name').lean();
+      const professionalUser = await User.findById(authUser._id).select('email name businessInfo').lean();
       if (customerUser?.email) {
         await sendProfessionalCompletedEmail(
           customerUser.email,
           customerUser.name || 'Customer',
-          professionalUser?.name || 'Professional',
+          getProfessionalDisplayName(professionalUser),
           extraCostTotal,
           String(updatedBooking._id),
           (updatedBooking as any).payment?.currency || 'EUR'
@@ -692,12 +701,12 @@ export const customerConfirmCompletion = async (req: Request, res: Response) => 
     try {
       const [customerUser, professionalUser] = await Promise.all([
         User.findById(finalizedBooking.customer).select('email name').lean(),
-        proId ? User.findById(proId).select('email name').lean() : null,
+        proId ? User.findById(proId).select('email name businessInfo').lean() : null,
       ]);
       if (professionalUser?.email) {
         await sendCustomerConfirmedCompletionEmail(
           professionalUser.email,
-          professionalUser.name || 'Professional',
+          getProfessionalDisplayName(professionalUser),
           customerUser?.name || 'Customer',
           String(finalizedBooking._id)
         );
@@ -720,6 +729,19 @@ export const customerConfirmCompletion = async (req: Request, res: Response) => 
       error: { code: 'SERVER_ERROR', message: 'Failed to process completion confirmation' }
     });
   }
+};
+
+const ALLOWED_DISPUTE_TYPES = ['extra_costs', 'reschedule', 'completion_request', 'warranty_claim', 'warranty_resolve', 'refund_request', 'in_progress'] as const;
+type DisputeType = typeof ALLOWED_DISPUTE_TYPES[number];
+
+const DISPUTE_ALLOWED_STATUSES_BY_TYPE: Record<DisputeType, BookingStatus[]> = {
+  extra_costs: ['professional_completed'],
+  reschedule: ['rescheduling_requested'],
+  completion_request: ['professional_completed'],
+  warranty_claim: ['completed'],
+  warranty_resolve: ['completed'],
+  refund_request: ['booked', 'in_progress', 'professional_completed', 'completed'],
+  in_progress: ['in_progress'],
 };
 
 export const customerDisputeExtraCosts = async (req: Request, res: Response) => {
@@ -750,15 +772,26 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
       });
     }
 
-    if (booking.status !== 'professional_completed') {
+    const { reason, description, type: rawType, attachments: rawAttachments } = req.body;
+    const requestedType: DisputeType = ALLOWED_DISPUTE_TYPES.includes(rawType) ? rawType : 'extra_costs';
+    const attachments: string[] = Array.isArray(rawAttachments)
+      ? rawAttachments
+          .filter((u: unknown): u is string => typeof u === 'string' && u.trim().length > 0)
+          .filter((u) => isAllowedS3Url(u))
+          .slice(0, 10)
+      : [];
+
+    const allowedStatuses = DISPUTE_ALLOWED_STATUSES_BY_TYPE[requestedType] || ['professional_completed'];
+    if (!allowedStatuses.includes(booking.status as BookingStatus)) {
       return res.status(400).json({
         success: false,
-        error: { code: 'INVALID_STATUS', message: `Cannot dispute while booking is "${booking.status}"` }
+        error: { code: 'INVALID_STATUS', message: `Cannot raise this dispute while booking is "${booking.status}"` }
       });
     }
 
-    const { reason, description } = req.body;
-    if (!reason) {
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    const trimmedDescription = typeof description === 'string' ? description.trim() : '';
+    if (!trimmedReason) {
       return res.status(400).json({
         success: false,
         error: { code: 'VALIDATION_ERROR', message: 'Dispute reason is required' }
@@ -768,17 +801,19 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
     const disputedAt = new Date();
     const slaDeadline = new Date(disputedAt.getTime() + DISPUTE_SLA_HOURS * 60 * 60 * 1000);
     const disputedBooking = await Booking.findOneAndUpdate(
-      { _id: booking._id, status: PROFESSIONAL_COMPLETION_PENDING_STATUS },
+      { _id: booking._id, status: booking.status },
       {
         $set: {
           status: 'dispute' as BookingStatus,
-          ...(booking.extraCosts && booking.extraCosts.length > 0 ? { extraCostStatus: 'disputed' } : {}),
+          ...(booking.extraCosts && booking.extraCosts.length > 0 && requestedType === 'extra_costs' ? { extraCostStatus: 'disputed' } : {}),
           dispute: {
             raisedBy: authUser._id,
-            reason,
-            description: description || '',
+            reason: trimmedReason,
+            description: trimmedDescription,
             raisedAt: disputedAt,
             slaDeadline,
+            type: requestedType,
+            attachments,
           }
         },
         $push: {
@@ -786,7 +821,7 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
             status: 'dispute' as BookingStatus,
             timestamp: disputedAt,
             updatedBy: authUser._id,
-            note: `Customer disputed: ${reason}`
+            note: `Customer disputed (${requestedType}): ${trimmedReason}`
           }
         }
       },
@@ -814,9 +849,9 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
         await sendDisputeRaisedEmail(
           professionalUser.email,
           ADMIN_NOTIFICATIONS_EMAIL,
-          professionalUser.name || 'Professional',
+          getProfessionalDisplayName(professionalUser),
           customerUser?.name || 'Customer',
-          reason,
+          trimmedReason,
           String(disputedBooking._id)
         );
       }
@@ -837,5 +872,56 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
       success: false,
       error: { code: 'SERVER_ERROR', message: 'Failed to process dispute' }
     });
+  }
+};
+
+export const uploadDisputeAttachments = async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).user;
+    const userId = authUser?._id?.toString();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
+    const files = (req as any).files as Express.Multer.File[] | undefined;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, error: { code: 'NO_FILES', message: 'No files provided' } });
+    }
+    if (files.length > 10) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'You can upload up to 10 files at once' } });
+    }
+
+    const uploaded: { url: string; key: string }[] = [];
+    try {
+      for (const file of files) {
+        const validation = file.mimetype.startsWith('image/')
+          ? await validateImageFileBuffer(file)
+          : file.mimetype.startsWith('video/')
+          ? validateVideoFile(file)
+          : validateFile(file);
+        if (!validation.valid) {
+          await Promise.allSettled(uploaded.map((u) => deleteFromS3(u.key)));
+          return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: validation.error || 'Invalid file' } });
+        }
+        const fileName = generateFileName(file.originalname, userId, 'dispute-attachments');
+        const result = await uploadToS3(file, fileName);
+        uploaded.push(result);
+      }
+    } catch (error: any) {
+      await Promise.allSettled(uploaded.map((u) => deleteFromS3(u.key)));
+      console.error('Error uploading dispute attachments:', error?.message || error);
+      return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: 'Failed to upload attachments' } });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        files: uploaded,
+        urls: uploaded.map((u) => u.url),
+      },
+    });
+  } catch (error: any) {
+    console.error('Error uploading dispute attachments:', error);
+    return res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Failed to upload attachments' } });
   }
 };

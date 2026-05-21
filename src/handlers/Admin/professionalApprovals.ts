@@ -3,6 +3,7 @@ import User, { IUser } from "../../models/user";
 import connecToDatabase from "../../config/db";
 import jwt from 'jsonwebtoken';
 import { sendProfessionalApprovalEmail, sendProfessionalIdChangeApprovalEmail, sendProfessionalIdChangeRejectionEmail, sendProfessionalRejectionEmail, sendProfessionalSuspensionEmail, sendProfessionalReactivationEmail } from "../../utils/emailService";
+import { getProfessionalDisplayName } from "../../utils/displayName";
 import { deleteFromS3, getPresignedUrl, parseS3KeyFromUrl, presignS3Url } from "../../utils/s3Upload";
 import mongoose from 'mongoose';
 import { normalizePendingOldValue } from "../../utils/pendingIdChanges";
@@ -288,7 +289,7 @@ export const approveProfessional = async (req: Request, res: Response, next: Nex
 
     // Send approval email
     try {
-      await sendProfessionalApprovalEmail(professional.email, professional.name);
+      await sendProfessionalApprovalEmail(professional.email, getProfessionalDisplayName(professional));
     } catch (emailError) {
       console.error(`📧 PHASE 1: Failed to send approval email to ${professional.email}:`, emailError);
     }
@@ -375,7 +376,7 @@ export const rejectProfessional = async (req: Request, res: Response, next: Next
 
     // Send rejection email
     try {
-      await sendProfessionalRejectionEmail(professional.email, professional.name, reason.trim());
+      await sendProfessionalRejectionEmail(professional.email, getProfessionalDisplayName(professional), reason.trim());
     } catch (emailError) {
       console.error(`📧 PHASE 1: Failed to send rejection email to ${professional.email}:`, emailError);
       // Don't fail the rejection if email fails
@@ -463,7 +464,7 @@ export const suspendProfessional = async (req: Request, res: Response, next: Nex
 
     // Send suspension email
     try {
-      await sendProfessionalSuspensionEmail(professional.email, professional.name, reason.trim());
+      await sendProfessionalSuspensionEmail(professional.email, getProfessionalDisplayName(professional), reason.trim());
       console.log(`📧 Admin: Suspension email sent to ${professional.email}`);
     } catch (emailError) {
       console.error(`📧 ADMIN: Failed to send suspension email to ${professional.email}:`, emailError);
@@ -551,7 +552,7 @@ export const reactivateProfessional = async (req: Request, res: Response, next: 
 
     // Send reactivation email
     try {
-      await sendProfessionalReactivationEmail(professional.email, professional.name);
+      await sendProfessionalReactivationEmail(professional.email, getProfessionalDisplayName(professional));
       console.log(`📧 Admin: Reactivation email sent to ${professional.email}`);
     } catch (emailError) {
       console.error(`📧 ADMIN: Failed to send reactivation email to ${professional.email}:`, emailError);
@@ -717,7 +718,7 @@ export const reviewIdChanges = async (req: Request, res: Response, next: NextFun
 
       // Send ID change approval email (distinct from initial profile approval)
       try {
-        await sendProfessionalIdChangeApprovalEmail(professional.email, professional.name);
+        await sendProfessionalIdChangeApprovalEmail(professional.email, getProfessionalDisplayName(professional));
       } catch (emailError) {
         console.error(`📧 PHASE 1: Failed to send ID change approval email to professionalId=${String(professional._id)}:`, emailError);
       }
@@ -787,7 +788,7 @@ export const reviewIdChanges = async (req: Request, res: Response, next: NextFun
 
       // Send rejection email
       try {
-        await sendProfessionalIdChangeRejectionEmail(professional.email, professional.name, reason.trim());
+        await sendProfessionalIdChangeRejectionEmail(professional.email, getProfessionalDisplayName(professional), reason.trim());
       } catch (emailError) {
         console.error(`Failed to send ID change rejection email to professionalId=${String(professional._id)}:`, emailError);
       }

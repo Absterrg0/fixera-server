@@ -5,6 +5,7 @@ import {
   sendRfqDeadlineReminderEmail,
   sendRfqDeadlineExpiredEmail,
 } from './emailService';
+import { getProfessionalDisplayName } from './displayName';
 
 export const runRfqDeadlineCheck = async () => {
   const now = new Date();
@@ -19,7 +20,7 @@ export const runRfqDeadlineCheck = async () => {
     const expiredBookings = await Booking.find({
       status: 'rfq_accepted',
       rfqDeadline: { $exists: true, $lte: now },
-    }).populate('customer', 'name email').populate('professional', 'name email');
+    }).populate('customer', 'name email').populate('professional', 'name email businessInfo');
 
     console.log(`[RFQ Scheduler] Found ${expiredBookings.length} expired RFQ booking(s) to cancel`);
 
@@ -41,7 +42,7 @@ export const runRfqDeadlineCheck = async () => {
         if (professional?.email && customer?.email) {
           await sendRfqDeadlineExpiredEmail(
             professional.email,
-            professional.name,
+            getProfessionalDisplayName(professional),
             customer.email,
             customer.name,
             booking._id.toString()
@@ -61,7 +62,7 @@ export const runRfqDeadlineCheck = async () => {
     const reminderBookings = await Booking.find({
       status: 'rfq_accepted',
       rfqDeadline: { $exists: true, $gt: now },
-    }).populate('professional', 'name email');
+    }).populate('professional', 'name email businessInfo');
 
     console.log(`[RFQ Scheduler] Found ${reminderBookings.length} active RFQ booking(s) to check for reminders`);
 
@@ -83,7 +84,7 @@ export const runRfqDeadlineCheck = async () => {
           if (professional?.email) {
             const sent = await sendRfqDeadlineReminderEmail(
               professional.email,
-              professional.name,
+              getProfessionalDisplayName(professional),
               daysRemaining,
               booking._id.toString()
             );

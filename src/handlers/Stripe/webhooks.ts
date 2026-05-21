@@ -17,6 +17,7 @@ import { convertFromStripeAmount } from '../../utils/payment';
 import { mapStripeAccountStatus } from '../../utils/stripeAccountStatus';
 import { deductPoints } from '../../utils/pointsSystem';
 import { sendPaymentConfirmedEmail, sendRefundProcessedEmail } from '../../utils/emailService';
+import { getProfessionalDisplayName } from '../../utils/displayName';
 
 const reserveWebhookEvent = async (event: Stripe.Event): Promise<{ shouldProcess: boolean }> => {
   const now = new Date();
@@ -343,14 +344,14 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     if (booking.payment.status === 'pending') {
       try {
         const customerUser = booking.customer ? await User.findById(booking.customer).select('email name').lean() : null;
-        const professionalUser = booking.professional ? await User.findById(booking.professional).select('email name').lean() : null;
+        const professionalUser = booking.professional ? await User.findById(booking.professional).select('email name businessInfo').lean() : null;
         if (customerUser?.email && professionalUser?.email) {
           const amountPaid = (booking.payment as any)?.amount ?? convertFromStripeAmount(paymentIntent.amount, paymentIntent.currency);
           await sendPaymentConfirmedEmail(
             customerUser.email,
             professionalUser.email,
             customerUser.name || 'Customer',
-            professionalUser.name || 'Professional',
+            getProfessionalDisplayName(professionalUser),
             amountPaid,
             String(booking._id),
             (paymentIntent.currency || 'EUR').toUpperCase()
