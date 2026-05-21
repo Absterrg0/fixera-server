@@ -7,7 +7,7 @@ import { Request, Response } from 'express';
 import Booking, { BookingStatus } from '../../models/booking';
 import Payment from '../../models/payment';
 import Project from '../../models/project';
-import { createPaymentIntent, captureAndTransferPayment } from '../Stripe/payment';
+import { createPaymentIntent, captureAndTransferPayment, executeRefund, RefundError } from '../Stripe/payment';
 import { stripe } from '../../services/stripe';
 import { generateIdempotencyKey } from '../../utils/payment';
 import { processReferralCompletion } from '../../utils/referralSystem';
@@ -34,9 +34,13 @@ import {
   sendRescheduleResolvedEmail,
 } from '../../utils/emailService';
 import { MAX_RESCHEDULES_PER_BOOKING } from '../../constants/booking';
+import { DISPUTE_SLA_HOURS } from '../../constants/dispute';
 import { findTeamConflicts } from '../../utils/scheduleConflict';
 import { releaseScheduleSlots } from '../../utils/scheduleRelease';
+import { getProfessionalDisplayName } from '../../utils/displayName';
 import WarrantyClaim from '../../models/warrantyClaim';
+
+const REFUNDABLE_PAYMENT_STATUSES = new Set(['authorized', 'completed', 'partially_refunded']);
 
 const BOOKING_STATUS_VALUES: BookingStatus[] = [
   'rfq',
@@ -1030,7 +1034,7 @@ export const setBookingSchedule = async (req: Request, res: Response) => {
       if (professional?.email) {
         await sendBookingScheduledEmail(
           professional.email,
-          professional.name || 'Professional',
+          getProfessionalDisplayName(professional),
           customer?.name || 'the customer',
           (booking as any).scheduledStartDate,
           String(booking._id)
@@ -1054,9 +1058,10 @@ export const requestBookingReschedule = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.params;
     const userId = (req as any).user?._id?.toString();
-    const { scheduledStartDate, scheduledStartTime, reason, note } = req.body;
+    const { scheduledStartDate, scheduledStartTime, reason, note, description } = req.body;
     const normalizedReason = typeof reason === 'string' ? reason.trim() : '';
     const normalizedNote = normalizeOptionalText(note);
+    const normalizedDescription = normalizeOptionalText(description);
 
     if (!userId) {
       return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
@@ -1086,12 +1091,15 @@ export const requestBookingReschedule = async (req: Request, res: Response) => {
     }
 
     const professionalId = await getProfessionalId(booking);
-    if (professionalId !== userId) {
-      return res.status(403).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Only the assigned professional can request rescheduling' } });
+    const customerId = booking.customer?._id?.toString?.() || booking.customer?.toString?.();
+    const isProfessional = professionalId === userId;
+    const isCustomer = customerId === userId;
+    if (!isProfessional && !isCustomer) {
+      return res.status(403).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Only the customer or assigned professional can request rescheduling' } });
     }
 
-    if (booking.status !== 'booked') {
-      return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Rescheduling can only be requested for booked work' } });
+    if (booking.status !== 'booked' && booking.status !== 'in_progress') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Rescheduling can only be requested for booked or in-progress work' } });
     }
 
     const completedRescheduleCount = (booking.rescheduleHistory || []).length;
@@ -1148,6 +1156,7 @@ export const requestBookingReschedule = async (req: Request, res: Response) => {
       requestedBy: (req as any).user._id,
       requestedAt: new Date(),
       reason: normalizedReason,
+      description: normalizedDescription,
       note: normalizedNote,
       previousSchedule: snapshotCurrentSchedule(booking),
       proposedSchedule: {
@@ -1162,11 +1171,12 @@ export const requestBookingReschedule = async (req: Request, res: Response) => {
       },
     } as any;
     booking.statusHistory = booking.statusHistory || [];
+    const requesterLabel = isCustomer ? 'Customer' : 'Professional';
     booking.statusHistory.push(
       createStatusHistoryEntry(
         'rescheduling_requested',
         (req as any).user._id,
-        truncateStatusHistoryNote(`Professional requested rescheduling: ${normalizedReason}`)
+        truncateStatusHistoryNote(`${requesterLabel} requested rescheduling: ${normalizedReason}`)
       )
     );
 
@@ -1181,7 +1191,7 @@ export const requestBookingReschedule = async (req: Request, res: Response) => {
         await sendRescheduleRequestedEmail(
           customer.email,
           customer.name || 'Customer',
-          professional?.name || 'the professional',
+          getProfessionalDisplayName(professional, 'the professional'),
           oldDate,
           newDate,
           normalizedReason,
@@ -1206,14 +1216,15 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
   try {
     const { bookingId } = req.params;
     const userId = (req as any).user?._id?.toString();
-    const { action, note } = req.body;
+    const { action, note, reason, description } = req.body;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
-    if (action !== 'accept' && action !== 'decline') {
-      return res.status(400).json({ success: false, error: { code: 'INVALID_ACTION', message: 'Action must be accept or decline' } });
+    const normalizedAction = action === 'decline' ? 'refund' : action;
+    if (!['accept', 'refund', 'dispute'].includes(normalizedAction)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_ACTION', message: 'Action must be accept, refund, or dispute' } });
     }
 
     const booking = await Booking.findById(bookingId)
@@ -1238,7 +1249,7 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
     booking.rescheduleRequest.responseNote = typeof note === 'string' ? note.trim() : undefined;
     booking.statusHistory = booking.statusHistory || [];
 
-    if (action === 'accept') {
+    if (normalizedAction === 'accept') {
       const proposedTeamMembers =
         Array.isArray(booking.rescheduleRequest.proposedSchedule?.assignedTeamMembers) &&
         booking.rescheduleRequest.proposedSchedule!.assignedTeamMembers!.length > 0
@@ -1274,20 +1285,72 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
       booking.statusHistory.push(
         createStatusHistoryEntry('booked', (req as any).user._id, 'Customer accepted the rescheduling request')
       );
-    } else {
+    } else if (normalizedAction === 'refund') {
       booking.rescheduleRequest.status = 'declined';
+      const refundReasonText = typeof note === 'string' && note.trim()
+        ? `Customer declined rescheduling request: ${note.trim()}`
+        : 'Customer declined rescheduling request';
       booking.cancellation = {
         cancelledBy: (req as any).user._id,
-        reason: typeof note === 'string' && note.trim()
-          ? `Customer declined rescheduling request: ${note.trim()}`
-          : 'Customer declined rescheduling request',
+        reason: refundReasonText,
         cancelledAt: new Date(),
       } as any;
+
+      const hasPayment = !!booking.payment?.stripePaymentIntentId;
+      let refundAmount = 0;
+      if (hasPayment && booking.payment && REFUNDABLE_PAYMENT_STATUSES.has(booking.payment.status)) {
+        try {
+          const result = await executeRefund(String(booking._id), { reason: refundReasonText });
+          refundAmount = result.amount;
+          if (booking.cancellation) {
+            (booking.cancellation as any).refundAmount = refundAmount || undefined;
+          }
+        } catch (refundError: any) {
+          if (refundError instanceof RefundError) {
+            return res.status(refundError.httpStatus).json({
+              success: false,
+              error: { code: refundError.code || 'REFUND_FAILED', message: `Refund failed: ${refundError.message}` },
+            });
+          }
+          throw refundError;
+        }
+      }
+
       booking.status = 'cancelled';
+      const refundIssued = refundAmount > 0;
       booking.statusHistory.push(
-        createStatusHistoryEntry('cancelled', (req as any).user._id, 'Customer declined the rescheduling request')
+        createStatusHistoryEntry(
+          'cancelled',
+          (req as any).user._id,
+          refundIssued
+            ? 'Customer declined rescheduling and refund issued'
+            : 'Customer declined rescheduling (no refund issued)'
+        )
       );
       releaseScheduleSlots(booking, (req as any).user._id);
+    } else if (normalizedAction === 'dispute') {
+      booking.rescheduleRequest.status = 'declined';
+      const disputeReason = typeof reason === 'string' && reason.trim()
+        ? reason.trim()
+        : 'Reschedule dispute';
+      const disputeDescription = typeof description === 'string' && description.trim()
+        ? description.trim()
+        : (typeof note === 'string' && note.trim() ? note.trim() : '');
+      const disputedAt = new Date();
+      const slaDeadline = new Date(disputedAt.getTime() + DISPUTE_SLA_HOURS * 60 * 60 * 1000);
+      booking.dispute = {
+        raisedBy: (req as any).user._id,
+        reason: disputeReason,
+        description: disputeDescription,
+        raisedAt: disputedAt,
+        slaDeadline,
+        type: 'reschedule',
+        attachments: [],
+      } as any;
+      booking.status = 'dispute';
+      booking.statusHistory.push(
+        createStatusHistoryEntry('dispute', (req as any).user._id, `Customer disputed rescheduling: ${disputeReason}`)
+      );
     }
 
     booking.rescheduleHistory = booking.rescheduleHistory || [];
@@ -1298,7 +1361,7 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
       note: booking.rescheduleRequest.note,
       previousSchedule: booking.rescheduleRequest.previousSchedule,
       proposedSchedule: booking.rescheduleRequest.proposedSchedule,
-      status: action === 'accept' ? 'accepted' : 'declined',
+      status: normalizedAction === 'accept' ? 'accepted' : 'declined',
       respondedAt: booking.rescheduleRequest.respondedAt,
       respondedBy: booking.rescheduleRequest.respondedBy,
       responseNote: booking.rescheduleRequest.responseNote,
@@ -1307,7 +1370,7 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
 
     await booking.save();
 
-    if (action === 'accept') {
+    if (normalizedAction === 'accept') {
       try {
         await WarrantyClaim.updateMany(
           {
@@ -1327,25 +1390,33 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
       }
     }
 
-    try {
-      const professional = booking.professional as any;
-      if (professional?.email) {
-        await sendRescheduleResolvedEmail(
-          professional.email,
-          professional.name || 'Professional',
-          action,
-          typeof note === 'string' ? note.trim() : undefined,
-          String(booking._id)
-        );
+    if (normalizedAction !== 'dispute') {
+      try {
+        const professional = booking.professional as any;
+        if (professional?.email) {
+          await sendRescheduleResolvedEmail(
+            professional.email,
+            getProfessionalDisplayName(professional),
+            normalizedAction === 'accept' ? 'accept' : 'decline',
+            typeof note === 'string' ? note.trim() : undefined,
+            String(booking._id)
+          );
+        }
+      } catch (emailError: any) {
+        console.error('Failed to send reschedule-resolved email:', emailError?.message || emailError);
       }
-    } catch (emailError: any) {
-      console.error('Failed to send reschedule-resolved email:', emailError?.message || emailError);
     }
+
+    const messageByAction: Record<string, string> = {
+      accept: 'Rescheduling request accepted',
+      refund: 'Rescheduling request declined and refund issued',
+      dispute: 'Rescheduling dispute raised',
+    };
 
     return res.json({
       success: true,
       data: {
-        message: action === 'accept' ? 'Rescheduling request accepted' : 'Rescheduling request declined',
+        message: messageByAction[normalizedAction] || 'Rescheduling request processed',
         booking,
       },
     });

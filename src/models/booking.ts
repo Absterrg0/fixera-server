@@ -276,6 +276,7 @@ export interface IBooking extends Document {
     requestedBy: Types.ObjectId;
     requestedAt: Date;
     reason: string;
+    description?: string;
     note?: string;
     previousSchedule?: IBookingScheduleSnapshot;
     proposedSchedule: IBookingScheduleSnapshot;
@@ -375,6 +376,9 @@ export interface IBooking extends Document {
     adminAdjustedAmount?: number;
     slaDeadline?: Date;
     slaBreachNotifiedAt?: Date;
+    type?: 'extra_costs' | 'reschedule' | 'completion_request' | 'warranty_claim' | 'warranty_resolve' | 'refund_request' | 'in_progress';
+    attachments?: string[];
+    resolutionAttachments?: string[];
   };
 
   // Post-booking questions (filled after booking is confirmed)
@@ -797,6 +801,7 @@ const BookingSchema = new Schema({
     },
     requestedAt: { type: Date },
     reason: { type: String, trim: true, maxlength: 500 },
+    description: { type: String, trim: true, maxlength: 2000 },
     note: { type: String, trim: true, maxlength: 2000 },
     previousSchedule: {
       scheduledStartDate: { type: Date },
@@ -1056,6 +1061,13 @@ const BookingSchema = new Schema({
     adminAdjustedAmount: { type: Number },
     slaDeadline: { type: Date },
     slaBreachNotifiedAt: { type: Date },
+    type: {
+      type: String,
+      enum: ['extra_costs', 'reschedule', 'completion_request', 'warranty_claim', 'warranty_resolve', 'refund_request', 'in_progress'],
+      default: 'extra_costs',
+    },
+    attachments: [{ type: String }],
+    resolutionAttachments: [{ type: String }],
   },
 
   // Post-booking data

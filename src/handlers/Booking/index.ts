@@ -11,6 +11,7 @@ import {
 import { presignS3Url, uploadToS3, generateFileName } from "../../utils/s3Upload";
 import { resolveSubprojectIndex } from "../../utils/bookingHelpers";
 import { sendBookingCancelledEmail, sendCancellationRequestRaisedEmail } from "../../utils/emailService";
+import { getProfessionalDisplayName } from "../../utils/displayName";
 import CancellationRequest from "../../models/cancellationRequest";
 
 const presignMaybeS3Url = async (url?: string | null) => {
@@ -808,7 +809,7 @@ export const getMyBookings = async (req: Request, res: Response, next: NextFunct
       Booking.find(query)
         .populate('customer', 'name email phone customerType')
         .populate('professional', 'name email username businessInfo')
-        .populate('project', 'title description pricing category service')
+        .populate('project', 'title description pricing category service timeMode')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parsedLimit),
@@ -864,7 +865,7 @@ export const getBookingById = async (req: Request, res: Response, next: NextFunc
       .populate('professional', professionalFields)
       .populate(
         'project',
-        `title description pricing category service team rfqQuestions postBookingQuestions professionalId extraOptions termsConditions subprojects minResources minOverlapPercentage${isAdmin ? ' resources' : ''}`
+        `title description pricing category service team timeMode rfqQuestions postBookingQuestions professionalId extraOptions termsConditions subprojects minResources minOverlapPercentage${isAdmin ? ' resources' : ''}`
       )
       .populate('assignedTeamMembers', 'name email');
 
@@ -1295,14 +1296,14 @@ export const cancelBooking = async (req: Request, res: Response, next: NextFunct
     try {
       const [customerUser, professionalUser] = await Promise.all([
         booking.customer ? User.findById(booking.customer).select('email name').lean() : null,
-        booking.professional ? User.findById(booking.professional).select('email name').lean() : null,
+        booking.professional ? User.findById(booking.professional).select('email name businessInfo').lean() : null,
       ]);
       const requesterName = isCustomer
         ? customerUser?.name || 'Customer'
-        : professionalUser?.name || 'Professional';
+        : getProfessionalDisplayName(professionalUser);
       const otherPartyEmail = isCustomer ? professionalUser?.email : customerUser?.email;
       const otherPartyName = isCustomer
-        ? professionalUser?.name || 'Professional'
+        ? getProfessionalDisplayName(professionalUser)
         : customerUser?.name || 'Customer';
 
       await sendCancellationRequestRaisedEmail({

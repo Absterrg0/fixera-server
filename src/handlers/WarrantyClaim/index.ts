@@ -30,6 +30,7 @@ import {
   sendWarrantyClaimOpenedEmail,
   sendWarrantyProposalSentEmail,
 } from "../../utils/emailService";
+import { getProfessionalDisplayName } from "../../utils/displayName";
 
 const WARRANTY_ADMIN_NOTIFICATIONS_EMAIL = process.env.ADMIN_NOTIFICATIONS_EMAIL || process.env.FROM_EMAIL || '';
 
@@ -704,13 +705,13 @@ export const openWarrantyClaim = async (req: Request, res: Response) => {
     try {
       const [customerUser, professionalUser] = await Promise.all([
         User.findById(booking.customer).select('email name').lean(),
-        User.findById(professionalId).select('email name').lean(),
+        User.findById(professionalId).select('email name businessInfo').lean(),
       ]);
       if (professionalUser?.email && WARRANTY_ADMIN_NOTIFICATIONS_EMAIL) {
         await sendWarrantyClaimOpenedEmail(
           professionalUser.email,
           WARRANTY_ADMIN_NOTIFICATIONS_EMAIL,
-          professionalUser.name || 'Professional',
+          getProfessionalDisplayName(professionalUser),
           customerUser?.name || 'Customer',
           String(booking._id),
           claim.claimNumber || String(claim._id)
@@ -949,13 +950,13 @@ export const submitWarrantyProposal = async (req: Request, res: Response) => {
     try {
       const [customerUser, professionalUser] = await Promise.all([
         User.findById(claim.customer).select('email name').lean(),
-        User.findById(claim.professional).select('name').lean(),
+        User.findById(claim.professional).select('name businessInfo').lean(),
       ]);
       if (customerUser?.email) {
         await sendWarrantyProposalSentEmail(
           customerUser.email,
           customerUser.name || 'Customer',
-          professionalUser?.name || 'Professional',
+          getProfessionalDisplayName(professionalUser),
           message.trim(),
           String(claim.booking),
           claim.claimNumber || String(claim._id)

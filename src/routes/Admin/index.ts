@@ -61,6 +61,7 @@ import {
   getDisputeDetails,
   resolveDispute,
   getDisputeAnalytics,
+  uploadDisputeResolutionAttachment,
 } from "../../handlers/Admin/disputeManagement";
 import { deleteUser } from "../../handlers/Admin/userDeletion";
 import {
@@ -91,7 +92,7 @@ import {
   updateDiscountCode,
   deleteDiscountCode,
 } from "../../handlers/Admin/discountCodes";
-import { uploadProfileImage as cmsImageMulter } from "../../utils/s3Upload";
+import { uploadProfileImage as cmsImageMulter, upload as adminFileUpload } from "../../utils/s3Upload";
 import { getAdminSiteSettings, updateAdminSiteSettings } from "../../handlers/Admin/siteSettings";
 import {
   adminListTickets,
@@ -192,6 +193,7 @@ adminRouter.route('/reviews/:bookingId/unhide').put(unhideReview);
 // Dispute management routes
 adminRouter.route('/disputes').get(getDisputes);
 adminRouter.route('/disputes/analytics').get(getDisputeAnalytics);
+adminRouter.route('/disputes/upload-attachment').post(adminFileUpload.array('files', 10), uploadDisputeResolutionAttachment);
 adminRouter.route('/disputes/:bookingId').get(getDisputeDetails);
 adminRouter.route('/disputes/:bookingId/resolve').post(resolveDispute);
 

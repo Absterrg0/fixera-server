@@ -27,6 +27,7 @@ import {
   customerConfirmCompletion,
   createExtraCostPaymentIntent,
   customerDisputeExtraCosts,
+  uploadDisputeAttachments,
 } from '../../handlers/Booking/completion';
 import { protect } from '../../middlewares/auth';
 import { upload, rfqUpload, uploadReviewImages } from '../../utils/s3Upload';
@@ -79,6 +80,7 @@ router.post('/:bookingId/professional-complete', upload.array('attachments', 10)
 router.post('/:bookingId/customer-confirm-completion', customerConfirmCompletion);
 router.post('/:bookingId/extra-cost-payment-intent', createExtraCostPaymentIntent);
 router.post('/:bookingId/dispute-extra-costs', customerDisputeExtraCosts);
+router.post('/:bookingId/dispute-upload', upload.array('files', 10), uploadDisputeAttachments);
 
 // Cancel booking
 router.post('/:bookingId/cancel', cancelBooking);

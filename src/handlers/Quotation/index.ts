@@ -23,6 +23,7 @@ import {
   sendQuotationRejectedEmail,
   sendDirectQuotationEmail,
 } from '../../utils/emailService';
+import { getProfessionalDisplayName } from '../../utils/displayName';
 
 const getSafeCommissionPercent = async (): Promise<number> => {
   try {
@@ -168,7 +169,7 @@ export const respondToRFQ = async (req: Request, res: Response) => {
 
     const booking = await Booking.findById(bookingId)
       .populate('customer', 'name email')
-      .populate('professional', 'name username email');
+      .populate('professional', 'name username email businessInfo');
 
     if (!booking) {
       return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
@@ -202,7 +203,7 @@ export const respondToRFQ = async (req: Request, res: Response) => {
 
       // Send email to customer
       try {
-        await sendRfqAcceptedEmail(customer.email, customer.name, professional.username || professional.name, booking._id.toString());
+        await sendRfqAcceptedEmail(customer.email, customer.name, getProfessionalDisplayName(professional), booking._id.toString());
       } catch (e) {
         console.error('Failed to send RFQ accepted email:', e);
       }
@@ -234,7 +235,7 @@ export const respondToRFQ = async (req: Request, res: Response) => {
     await booking.save();
 
     try {
-      await sendRfqRejectedEmail(customer.email, customer.name, professional.username || professional.name, rejectionReason);
+      await sendRfqRejectedEmail(customer.email, customer.name, getProfessionalDisplayName(professional), rejectionReason);
     } catch (e) {
       console.error('Failed to send RFQ rejected email:', e);
     }
@@ -314,7 +315,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
 
     const booking = await Booking.findById(bookingId)
       .populate('customer', 'name email')
-      .populate('professional', 'name username email');
+      .populate('professional', 'name username email businessInfo');
 
     if (!booking) {
       return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
@@ -380,7 +381,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
     try {
       const commissionPercent = await getSafeCommissionPercent();
       const customerAmount = +(totalAmount * (1 + commissionPercent / 100)).toFixed(2);
-      const profDisplayName = professional.username || professional.name;
+      const profDisplayName = getProfessionalDisplayName(professional);
       const isDirect = booking.rfqResponse === undefined || booking.rfqResponse === null;
       if (isDirect) {
         await sendDirectQuotationEmail(customer.email, customer.name, profDisplayName, booking.quotationNumber || '', customerAmount, booking._id.toString());
@@ -462,7 +463,7 @@ export const editQuotation = async (req: Request, res: Response) => {
 
     const booking = await Booking.findById(bookingId)
       .populate('customer', 'name email')
-      .populate('professional', 'name username email');
+      .populate('professional', 'name username email businessInfo');
 
     if (!booking) {
       return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
@@ -523,7 +524,7 @@ export const editQuotation = async (req: Request, res: Response) => {
     const professional = booking.professional as any;
 
     try {
-      await sendQuotationUpdatedEmail(customer.email, customer.name, professional.username || professional.name, booking.quotationNumber || '', newVersionNumber, booking._id.toString());
+      await sendQuotationUpdatedEmail(customer.email, customer.name, getProfessionalDisplayName(professional), booking.quotationNumber || '', newVersionNumber, booking._id.toString());
     } catch (e) {
       console.error('Failed to send quotation updated email:', e);
     }
@@ -565,7 +566,7 @@ export const customerRespondToQuotation = async (req: Request, res: Response) =>
 
     const booking = await Booking.findById(bookingId)
       .populate('customer', 'name email')
-      .populate('professional', 'name username email');
+      .populate('professional', 'name username email businessInfo');
 
     if (!booking) {
       return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
@@ -601,7 +602,7 @@ export const customerRespondToQuotation = async (req: Request, res: Response) =>
       await booking.save();
 
       try {
-        await sendQuotationRejectedEmail(professional.email, professional.name, customer.name, booking.quotationNumber || '', rejectionReason);
+        await sendQuotationRejectedEmail(professional.email, getProfessionalDisplayName(professional), customer.name, booking.quotationNumber || '', rejectionReason);
       } catch (e) {
         console.error('Failed to send quotation rejected email:', e);
       }
@@ -649,7 +650,7 @@ export const customerRespondToQuotation = async (req: Request, res: Response) =>
     await booking.save();
 
     try {
-      await sendQuotationAcceptedEmail(professional.email, professional.name, customer.name, booking.quotationNumber || '', booking._id.toString());
+      await sendQuotationAcceptedEmail(professional.email, getProfessionalDisplayName(professional), customer.name, booking.quotationNumber || '', booking._id.toString());
     } catch (e) {
       console.error('Failed to send quotation accepted email:', e);
     }
