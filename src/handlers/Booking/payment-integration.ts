@@ -1317,8 +1317,15 @@ export const respondToBookingReschedule = async (req: Request, res: Response) =>
       }
 
       booking.status = 'cancelled';
+      const refundIssued = refundAmount > 0;
       booking.statusHistory.push(
-        createStatusHistoryEntry('cancelled', (req as any).user._id, 'Customer declined rescheduling and refund issued')
+        createStatusHistoryEntry(
+          'cancelled',
+          (req as any).user._id,
+          refundIssued
+            ? 'Customer declined rescheduling and refund issued'
+            : 'Customer declined rescheduling (no refund issued)'
+        )
       );
       releaseScheduleSlots(booking, (req as any).user._id);
     } else if (normalizedAction === 'dispute') {

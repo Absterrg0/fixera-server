@@ -843,7 +843,7 @@ export const customerDisputeExtraCosts = async (req: Request, res: Response) => 
       const proId = await getProfessionalId(disputedBooking);
       const [customerUser, professionalUser] = await Promise.all([
         User.findById(disputedBooking.customer).select('email name').lean(),
-        proId ? User.findById(proId).select('email name').lean() : null,
+        proId ? User.findById(proId).select('email name businessInfo').lean() : null,
       ]);
       if (professionalUser?.email && ADMIN_NOTIFICATIONS_EMAIL) {
         await sendDisputeRaisedEmail(
