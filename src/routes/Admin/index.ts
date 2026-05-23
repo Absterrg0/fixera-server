@@ -120,7 +120,11 @@ import {
   getKpiSummary,
   getKpiByRegion,
   getKpiByService,
+  getKpiBySubproject,
+  getKpiByProfessional,
+  getKpiByCustomer,
   getKpiProfessionalResponse,
+  getKpiCountries,
   exportKpiCsv,
   triggerKpiEmailReport,
 } from "../../handlers/Admin/kpiDashboard";
@@ -289,8 +293,12 @@ adminRouter.route('/run-dispute-sla-check').post(async (_req, res) => {
 
 // Monthly KPI dashboard
 adminRouter.route('/kpi/summary').get(getKpiSummary);
+adminRouter.route('/kpi/countries').get(getKpiCountries);
 adminRouter.route('/kpi/by-region').get(getKpiByRegion);
 adminRouter.route('/kpi/by-service').get(getKpiByService);
+adminRouter.route('/kpi/by-subproject').get(getKpiBySubproject);
+adminRouter.route('/kpi/by-professional').get(getKpiByProfessional);
+adminRouter.route('/kpi/by-customer').get(getKpiByCustomer);
 adminRouter.route('/kpi/professional-response').get(getKpiProfessionalResponse);
 adminRouter.route('/kpi/export').get(exportKpiCsv);
 adminRouter.route('/kpi/email-report').post(triggerKpiEmailReport);
