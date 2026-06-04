@@ -393,7 +393,13 @@ export const resolveDispute = async (req: Request, res: Response) => {
       setFields['dispute.resolutionAttachments'] = sanitizedAttachments;
     }
 
+    let originalExtraCostStatus: string | undefined;
+    let originalExtraCostTotal: number | undefined;
+    let originalAdminAdjustedAmount: number | undefined;
     if (isExtraCostsDispute) {
+      originalExtraCostStatus = (booking as any).extraCostStatus;
+      originalExtraCostTotal = booking.extraCostTotal;
+      originalAdminAdjustedAmount = (booking.dispute as any)?.adminAdjustedAmount;
       const originalExtraCostAmount = Number(booking.extraCostTotal || 0);
       setFields.extraCostStatus = 'confirmed';
       if (action === 'accept_professional') {
@@ -459,11 +465,25 @@ export const resolveDispute = async (req: Request, res: Response) => {
           reason: `Dispute resolution (${disputeType}): ${resolution}`,
         });
       } catch (refundError: any) {
+        const rollbackSet: Record<string, any> = { status: ACTIVE_DISPUTE_STATUS };
+        const rollbackUnset: Record<string, any> = {
+          'dispute.resolvedAt': '',
+          'dispute.resolution': '',
+          'dispute.resolvedBy': '',
+        };
+        if (isExtraCostsDispute) {
+          if (originalExtraCostStatus !== undefined) rollbackSet.extraCostStatus = originalExtraCostStatus;
+          else rollbackUnset.extraCostStatus = '';
+          if (originalExtraCostTotal !== undefined) rollbackSet.extraCostTotal = originalExtraCostTotal;
+          else rollbackUnset.extraCostTotal = '';
+          if (originalAdminAdjustedAmount !== undefined) rollbackSet['dispute.adminAdjustedAmount'] = originalAdminAdjustedAmount;
+          else rollbackUnset['dispute.adminAdjustedAmount'] = '';
+        }
         await Booking.updateOne(
           { _id: resolvedBooking._id },
           {
-            $set: { status: ACTIVE_DISPUTE_STATUS },
-            $unset: { 'dispute.resolvedAt': '', 'dispute.resolution': '', 'dispute.resolvedBy': '' },
+            $set: rollbackSet,
+            $unset: rollbackUnset,
             $push: {
               statusHistory: {
                 status: ACTIVE_DISPUTE_STATUS,
