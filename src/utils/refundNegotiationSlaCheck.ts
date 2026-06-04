@@ -11,7 +11,7 @@ export interface RefundSlaCheckResult {
 
 /**
  * Escalates customer refund requests the professional did not respond to within
- * the response deadline (5 business days). Mirrors the dispute/warranty scheduler pattern.
+ * the response deadline (5 business days). Invoked on demand via the admin endpoint.
  */
 export const runRefundNegotiationSlaCheck = async (): Promise<RefundSlaCheckResult> => {
   const now = new Date();

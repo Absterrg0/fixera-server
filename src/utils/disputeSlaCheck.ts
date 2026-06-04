@@ -9,7 +9,7 @@ export interface DisputeSlaCheckResult {
 
 /**
  * Scans for disputes that have breached the SLA and notifies admin once per dispute.
- * Mirrors the warranty/RFQ scheduler pattern — invoked manually via admin endpoint.
+ * Invoked on demand via the admin endpoint (no background scheduler).
  */
 export const runDisputeSlaCheck = async (): Promise<DisputeSlaCheckResult> => {
   const now = new Date();

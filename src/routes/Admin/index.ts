@@ -69,10 +69,10 @@ import {
   listAllFavorites,
   deleteFavorite,
 } from "../../handlers/Admin/favoritesAdmin";
-import { runWarrantyClaimChecks } from "../../utils/warrantyClaimScheduler";
-import { runRfqDeadlineCheck } from "../../utils/rfqDeadlineScheduler";
-import { runDisputeSlaCheck } from "../../utils/disputeSlaScheduler";
-import { runRefundNegotiationSlaCheck } from "../../utils/refundNegotiationScheduler";
+import { runWarrantyClaimChecks } from "../../utils/warrantyClaimChecks";
+import { runRfqDeadlineCheck } from "../../utils/rfqDeadlineCheck";
+import { runDisputeSlaCheck } from "../../utils/disputeSlaCheck";
+import { runRefundNegotiationSlaCheck } from "../../utils/refundNegotiationSlaCheck";
 import {
   listCmsContent,
   getCmsContentById,
@@ -267,7 +267,7 @@ adminRouter.route('/conversations/:id/close').post(adminCloseSupportChat);
 adminRouter.route('/bookings/:bookingId/conversation').get(adminGetBookingConversation);
 adminRouter.route('/chat/start-support').post(adminStartSupportChat);
 
-// Manual scheduler triggers
+// Manual maintenance check triggers (no background scheduler; call these on demand or via cron)
 adminRouter.route('/run-warranty-checks').post(async (_req, res) => {
   try {
     const result = await runWarrantyClaimChecks();
