@@ -1310,26 +1310,43 @@ export const cancelBooking = async (req: Request, res: Response, next: NextFunct
     const sanitizedEvidence = Array.isArray(evidence)
       ? evidence.filter((value: unknown): value is string => typeof value === 'string').slice(0, 10)
       : [];
-    const cancellationRequest = await CancellationRequest.create({
-      booking: booking._id,
-      requestedBy: new mongoose.Types.ObjectId(userId),
-      requestedRole,
-      ...(normalizedCategory ? { reasonCategory: normalizedCategory } : {}),
-      reason: trimmedReason,
-      evidence: sanitizedEvidence,
-      status: 'pending',
-      ...(isCustomer ? { responseDeadline: addBusinessDays(new Date(), REFUND_RESPONSE_BUSINESS_DAYS) } : {}),
-    });
+    const shouldMarkNoShow = isCustomer && normalizedCategory === 'no_show' && !booking.noShow?.markedAt;
 
-    // A customer citing a professional no-show feeds the admin No-show KPI.
-    if (isCustomer && normalizedCategory === 'no_show' && !booking.noShow?.markedAt) {
-      booking.noShow = {
-        markedAt: new Date(),
-        markedBy: new mongoose.Types.ObjectId(userId),
-        reason: trimmedReason,
-        source: 'customer_cancellation',
-      };
-      await booking.save();
+    let cancellationRequest!: InstanceType<typeof CancellationRequest>;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const [created] = await CancellationRequest.create(
+        [{
+          booking: booking._id,
+          requestedBy: new mongoose.Types.ObjectId(userId),
+          requestedRole,
+          ...(normalizedCategory ? { reasonCategory: normalizedCategory } : {}),
+          reason: trimmedReason,
+          evidence: sanitizedEvidence,
+          status: 'pending',
+          ...(isCustomer ? { responseDeadline: addBusinessDays(new Date(), REFUND_RESPONSE_BUSINESS_DAYS) } : {}),
+        }],
+        { session }
+      );
+      cancellationRequest = created;
+
+      if (shouldMarkNoShow) {
+        booking.noShow = {
+          markedAt: new Date(),
+          markedBy: new mongoose.Types.ObjectId(userId),
+          reason: trimmedReason,
+          source: 'customer_cancellation',
+        };
+        await booking.save({ session });
+      }
+
+      await session.commitTransaction();
+    } catch (txError) {
+      await session.abortTransaction();
+      throw txError;
+    } finally {
+      session.endSession();
     }
 
     try {

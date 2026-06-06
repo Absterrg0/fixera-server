@@ -456,6 +456,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   }
 
   booking.payment.refundedAt = new Date();
+  booking.payment.refundAmount = refundAmount;
   await booking.save();
 
   await Payment.findOneAndUpdate(
@@ -568,6 +569,7 @@ async function handleDisputeClosed(dispute: Stripe.Dispute) {
     const disputeAmount = convertFromStripeAmount(dispute.amount, dispute.currency);
     booking.payment.status = 'refunded';
     booking.payment.refundedAt = new Date();
+    booking.payment.refundAmount = disputeAmount;
     booking.payment.refundReason = `Dispute lost: ${dispute.reason || 'unknown'}`;
     booking.payment.refundSource = 'platform';
     booking.payment.refundNotes = `Dispute ${dispute.id} lost. Status: ${dispute.status}`;

@@ -215,8 +215,8 @@ export const getKpiSummary = async (req: Request, res: Response) => {
             total: {
               $sum: {
                 $ifNull: [
-                  '$cancellation.refundAmount',
-                  { $ifNull: ['$payment.totalWithVat', { $ifNull: ['$payment.amount', 0] }] },
+                  '$payment.refundAmount',
+                  { $ifNull: ['$cancellation.refundAmount', { $ifNull: ['$payment.totalWithVat', { $ifNull: ['$payment.amount', 0] }] }] },
                 ],
               },
             },

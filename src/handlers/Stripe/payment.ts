@@ -967,6 +967,7 @@ export const executeRefund = async (
     const isPartial = !!normalizedAmount && normalizedAmount < remainingRefundable;
     booking.payment.status = isPartial ? 'partially_refunded' : 'refunded';
     booking.payment.refundedAt = new Date();
+    booking.payment.refundAmount = previousRefundTotal + refundAmount;
     booking.payment.refundReason = reason;
     booking.payment.refundSource = 'platform';
     if (!isPartial) {
@@ -1050,6 +1051,7 @@ export const executeRefund = async (
     booking.payment.status =
       normalizedAmount && normalizedAmount < remainingRefundable ? 'partially_refunded' : 'refunded';
     booking.payment.refundedAt = new Date();
+    booking.payment.refundAmount = previousRefundTotal + refundAmount;
     booking.payment.refundReason = reason;
     if (booking.payment.status === 'refunded') {
       booking.status = 'refunded';

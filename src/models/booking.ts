@@ -227,6 +227,7 @@ export interface IBooking extends Document {
     disputeOpenedAt?: Date;
 
     // Refund
+    refundAmount?: number;
     refundReason?: string;
     refundSource?: 'professional' | 'platform' | 'mixed';
     refundNotes?: string;
@@ -742,6 +743,7 @@ const BookingSchema = new Schema({
     disputeOpenedAt: { type: Date },
 
     // Refund metadata
+    refundAmount: { type: Number, min: 0 },
     refundReason: { type: String, maxlength: 500 },
     refundSource: {
       type: String,
@@ -1162,6 +1164,7 @@ BookingSchema.index({ professional: 1, project: 1, createdAt: 1 });
 // KPI dashboard indexes
 BookingSchema.index({ createdAt: 1, 'location.city': 1, status: 1 });
 BookingSchema.index({ 'dispute.raisedAt': 1 }, { sparse: true });
+BookingSchema.index({ 'noShow.markedAt': 1 }, { sparse: true });
 
 // Helper to parse HH:mm to minutes for comparison
 const parseTimeToMinutes = (time: string): number => {
