@@ -445,6 +445,10 @@ export const sendMessage = async (req: Request, res: Response) => {
     return res.status(403).json({ success: false, msg: "Not allowed to send messages to this conversation" });
   }
 
+  if (conversation.type === "support" && conversation.status === "archived") {
+    return res.status(409).json({ success: false, msg: "This support conversation is closed" });
+  }
+
   const professionalId = getIdString(conversation.professionalId);
   const customerId = getIdString(conversation.customerId);
   const supportAdminId = getIdString(conversation.supportAdminId);

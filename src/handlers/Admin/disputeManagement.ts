@@ -18,6 +18,32 @@ import {
 import { sendDisputeResolvedEmail } from '../../utils/emailService';
 import { auditLog } from '../../utils/auditLogger';
 import { getProfessionalDisplayName } from '../../utils/displayName';
+import { presignS3Url } from '../../utils/s3Upload';
+
+const presignAttachments = async (urls?: unknown): Promise<string[]> => {
+  if (!Array.isArray(urls) || urls.length === 0) return [];
+  return Promise.all(
+    urls.map(async (u) => {
+      if (typeof u !== 'string') return u as string;
+      try {
+        const signed = await presignS3Url(u);
+        return signed || u;
+      } catch {
+        return u;
+      }
+    })
+  );
+};
+
+const presignBookingAttachments = async (booking: any): Promise<void> => {
+  if (!booking) return;
+  if (booking.dispute?.attachments) {
+    booking.dispute.attachments = await presignAttachments(booking.dispute.attachments);
+  }
+  if (booking.completionAttestation?.attachments) {
+    booking.completionAttestation.attachments = await presignAttachments(booking.completionAttestation.attachments);
+  }
+};
 import {
   isAllowedS3Url,
   generateFileName,
@@ -31,8 +57,8 @@ import {
 const ACTIVE_DISPUTE_STATUS: BookingStatus = 'dispute';
 const COMPLETED_BOOKING_STATUS: BookingStatus = 'completed';
 
-type ForceBookingStatus = 'completed' | 'cancelled' | 'refunded' | 'in_progress' | 'booked';
-const FORCE_STATUS_VALUES: ForceBookingStatus[] = ['completed', 'cancelled', 'refunded', 'in_progress', 'booked'];
+type ForceBookingStatus = 'completed' | 'cancelled' | 'refunded' | 'in_progress' | 'booked' | 'professional_completed';
+const FORCE_STATUS_VALUES: ForceBookingStatus[] = ['completed', 'cancelled', 'refunded', 'in_progress', 'booked', 'professional_completed'];
 
 const buildDisputeFilter = (status?: string) => {
   if (status === 'resolved') {
@@ -245,6 +271,15 @@ export const getDisputes = async (req: Request, res: Response) => {
 
     const externalRows = pageNum === 1 ? await buildExternalDisputeRows(typeof status === 'string' ? status : undefined) : [];
 
+    await Promise.all(disputes.map((d: any) => presignBookingAttachments(d)));
+    await Promise.all(
+      externalRows.map(async (row: any) => {
+        if (row?.dispute?.attachments) {
+          row.dispute.attachments = await presignAttachments(row.dispute.attachments);
+        }
+      })
+    );
+
     return res.json({
       success: true,
       data: {
@@ -293,9 +328,12 @@ export const getDisputeDetails = async (req: Request, res: Response) => {
       });
     }
 
+    const bookingObj = booking.toObject();
+    await presignBookingAttachments(bookingObj);
+
     return res.json({
       success: true,
-      data: { booking }
+      data: { booking: bookingObj }
     });
   } catch (error: any) {
     console.error('Error fetching dispute details:', error);
@@ -459,11 +497,23 @@ export const resolveDispute = async (req: Request, res: Response) => {
         !isExtraCostsDispute && action === 'adjust' && Number.isFinite(adjustedAmount) && adjustedAmount > 0
           ? Number(adjustedAmount)
           : undefined;
+      const refundReason = `Dispute resolution (${disputeType}): ${resolution}`;
       try {
-        await executeRefund(resolvedBooking._id.toString(), {
+        const refundResult = await executeRefund(resolvedBooking._id.toString(), {
           amount: customRefundAmount,
-          reason: `Dispute resolution (${disputeType}): ${resolution}`,
+          reason: refundReason,
         });
+        await Booking.updateOne(
+          { _id: resolvedBooking._id },
+          {
+            $set: {
+              'cancellation.cancelledBy': adminUser._id,
+              'cancellation.cancelledAt': new Date(),
+              'cancellation.reason': refundReason,
+              'cancellation.refundAmount': refundResult.amount,
+            },
+          }
+        ).catch((cancelWriteError) => console.error('Failed to record dispute refund on booking cancellation:', cancelWriteError));
       } catch (refundError: any) {
         const rollbackSet: Record<string, any> = { status: ACTIVE_DISPUTE_STATUS };
         const rollbackUnset: Record<string, any> = {

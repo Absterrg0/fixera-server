@@ -88,6 +88,24 @@ const escalateRequest = async (
   request.escalatedAt = new Date();
   request.escalationReason = reason;
   await request.save();
+
+  try {
+    const booking = await Booking.findById(request.booking);
+    if (booking && (booking.status === 'booked' || booking.status === 'in_progress')) {
+      booking.statusBeforeDispute = booking.status;
+      booking.status = 'dispute';
+      booking.statusHistory = booking.statusHistory || [];
+      booking.statusHistory.push({
+        status: 'dispute',
+        timestamp: new Date(),
+        updatedBy: request.requestedBy,
+        note: `Refund dispute escalated (${reason})`,
+      } as any);
+      await booking.save();
+    }
+  } catch (err) {
+    console.error('Failed to set booking status to dispute on refund escalation:', err);
+  }
 };
 
 export const listProfessionalRefundRequests = async (req: Request, res: Response) => {

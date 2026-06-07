@@ -301,6 +301,26 @@ export const denyCancellationRequest = async (req: Request, res: Response) => {
     }
 
     try {
+      const booking = await Booking.findById(cancellation.booking);
+      if (booking && booking.status === "dispute") {
+        const restored = (booking.statusBeforeDispute as any) ||
+          (booking.actualStartDate ? "in_progress" : "booked");
+        booking.status = restored;
+        booking.statusBeforeDispute = undefined;
+        booking.statusHistory = booking.statusHistory || [];
+        booking.statusHistory.push({
+          status: restored,
+          timestamp: new Date(),
+          updatedBy: adminObjectId,
+          note: "Refund request denied; booking restored from dispute",
+        } as any);
+        await booking.save();
+      }
+    } catch (restoreError: any) {
+      console.error("Failed to restore booking status after refund deny:", restoreError?.message || restoreError);
+    }
+
+    try {
       const requester: any = cancellation.requestedBy;
       if (requester?.email) {
         const requesterName = cancellation.requestedRole === "professional"

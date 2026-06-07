@@ -136,6 +136,7 @@ export interface IBooking extends Document {
 
   // Status and lifecycle
   status: BookingStatus;
+  statusBeforeDispute?: BookingStatus;
   statusHistory: {
     status: BookingStatus;
     timestamp: Date;
@@ -444,6 +445,10 @@ const BookingSchema = new Schema({
     default: 'rfq',
     required: true,
     index: true
+  },
+  statusBeforeDispute: {
+    type: String,
+    enum: ['rfq', 'rfq_accepted', 'draft_quote', 'quoted', 'quote_accepted', 'quote_rejected', 'payment_pending', 'booked', 'rescheduling_requested', 'in_progress', 'professional_completed', 'completed', 'cancelled', 'dispute', 'refunded'],
   },
   statusHistory: [{
     status: {

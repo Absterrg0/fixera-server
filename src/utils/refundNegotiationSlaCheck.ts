@@ -35,6 +35,23 @@ export const runRefundNegotiationSlaCheck = async (): Promise<RefundSlaCheckResu
       stats.escalated++;
 
       try {
+        const disputedBooking = await Booking.findById(request.booking);
+        if (disputedBooking && (disputedBooking.status === "booked" || disputedBooking.status === "in_progress")) {
+          disputedBooking.statusBeforeDispute = disputedBooking.status;
+          disputedBooking.status = "dispute";
+          disputedBooking.statusHistory = disputedBooking.statusHistory || [];
+          disputedBooking.statusHistory.push({
+            status: "dispute",
+            timestamp: new Date(),
+            note: "Refund dispute escalated (no_response)",
+          } as any);
+          await disputedBooking.save();
+        }
+      } catch (statusError: any) {
+        console.error(`[refundSla] Failed to set booking status to dispute for ${request._id}:`, statusError?.message || statusError);
+      }
+
+      try {
         const booking = await Booking.findById(request.booking).select("customer").lean();
         const customer = booking?.customer
           ? await User.findById(booking.customer).select("email name").lean()
