@@ -11,9 +11,7 @@ export const ADMIN_FORCEABLE_STATUSES = [
   "in_progress",
   "professional_completed",
   "completed",
-  "cancelled",
   "dispute",
-  "refunded",
 ];
 
 export const getAdminBookingDetail = async (req: Request, res: Response) => {
