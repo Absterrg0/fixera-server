@@ -12,7 +12,8 @@
     "seed:admin:ts": "npx tsx src/scripts/seedAdmin.ts",
     "seed:cms": "npx tsx src/scripts/seedCmsDefaults.ts",
     "seed:csv": "npx tsx src/scripts/parseAndImportCSV.ts",
-    "migrate:merge-solar": "npx tsx src/scripts/mergeDuplicateSolarServices.ts"
+    "migrate:merge-solar": "npx tsx src/scripts/mergeDuplicateSolarServices.ts",
+    "migrate:fix-conversation-indexes": "npx tsx src/scripts/fixConversationIndexes.ts"
   },
   "repository": {
     "type": "git",

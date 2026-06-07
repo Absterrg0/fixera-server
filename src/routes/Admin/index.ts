@@ -119,7 +119,7 @@ import {
   adminCloseSupportChat,
   adminGetBookingConversation,
 } from "../../handlers/Admin/chatModeration";
-import { getAdminBookingDetail } from "../../handlers/Admin/bookingDetail";
+import { getAdminBookingDetail, forceBookingStatus } from "../../handlers/Admin/bookingDetail";
 import {
   getKpiSummary,
   getKpiByRegion,
@@ -255,6 +255,7 @@ adminRouter.route('/cancellation-requests/:id/deny').post(denyCancellationReques
 
 // Booking detail (consolidated)
 adminRouter.route('/bookings/:id/full').get(getAdminBookingDetail);
+adminRouter.route('/bookings/:id/force-status').post(forceBookingStatus);
 
 // Chat moderation
 adminRouter.route('/chat-reports').get(listChatReports);

@@ -19,6 +19,7 @@ import { sendDisputeResolvedEmail } from '../../utils/emailService';
 import { auditLog } from '../../utils/auditLogger';
 import { getProfessionalDisplayName } from '../../utils/displayName';
 import { presignS3Url } from '../../utils/s3Upload';
+import { buildProjectScheduleWindow } from '../../utils/scheduleEngine';
 
 const presignAttachments = async (urls?: unknown): Promise<string[]> => {
   if (!Array.isArray(urls) || urls.length === 0) return [];
@@ -39,6 +40,9 @@ const presignBookingAttachments = async (booking: any): Promise<void> => {
   if (!booking) return;
   if (booking.dispute?.attachments) {
     booking.dispute.attachments = await presignAttachments(booking.dispute.attachments);
+  }
+  if (booking.dispute?.resolutionAttachments) {
+    booking.dispute.resolutionAttachments = await presignAttachments(booking.dispute.resolutionAttachments);
   }
   if (booking.completionAttestation?.attachments) {
     booking.completionAttestation.attachments = await presignAttachments(booking.completionAttestation.attachments);
@@ -347,7 +351,7 @@ export const getDisputeDetails = async (req: Request, res: Response) => {
 export const resolveDispute = async (req: Request, res: Response) => {
   const { bookingId } = req.params;
   const adminUser = (req as any).user || (req as any).admin;
-  const { action, adjustedAmount, resolution, forceStatus, resolutionAttachments } = req.body || {};
+  const { action, adjustedAmount, resolution, forceStatus, resolutionAttachments, forcedStartDate, forcedStartTime } = req.body || {};
 
   let resolvedBooking: any = null;
   let finalExtraCostAmount = 0;
@@ -416,12 +420,50 @@ export const resolveDispute = async (req: Request, res: Response) => {
     isExtraCostsDispute = disputeType === 'extra_costs';
     targetStatus = (forceStatus as BookingStatus) || COMPLETED_BOOKING_STATUS;
 
+    let rescheduleScheduleFields: Record<string, any> | null = null;
+    if (disputeType === 'reschedule' && typeof forcedStartDate === 'string' && forcedStartDate.trim()) {
+      const projectId = (booking.project as any)?.toString?.();
+      if (!projectId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Cannot force a start date on a booking without a linked project' }
+        });
+      }
+      const window = await buildProjectScheduleWindow({
+        projectId,
+        subprojectIndex: typeof booking.selectedSubprojectIndex === 'number' ? booking.selectedSubprojectIndex : undefined,
+        startDate: forcedStartDate.trim(),
+        startTime: typeof forcedStartTime === 'string' ? forcedStartTime : undefined,
+        excludeBookingId: booking._id.toString(),
+      });
+      if (!window) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_DATE', message: 'The forced start date is not available for this project' }
+        });
+      }
+      rescheduleScheduleFields = {
+        scheduledStartDate: window.scheduledStartDate,
+        scheduledExecutionEndDate: window.scheduledExecutionEndDate,
+        scheduledBufferStartDate: window.scheduledBufferStartDate,
+        scheduledBufferEndDate: window.scheduledBufferEndDate,
+        scheduledBufferUnit: window.scheduledBufferUnit,
+        scheduledStartTime: window.scheduledStartTime,
+        scheduledEndTime: window.scheduledEndTime,
+        ...(window.assignedTeamMembers?.length ? { assignedTeamMembers: window.assignedTeamMembers } : {}),
+      };
+      if (forceStatus === undefined) {
+        targetStatus = 'booked' as BookingStatus;
+      }
+    }
+
     const completionDate = new Date();
     const setFields: Record<string, any> = {
       status: targetStatus,
       'dispute.resolvedAt': completionDate,
       'dispute.resolution': resolution,
       'dispute.resolvedBy': adminUser._id,
+      ...(rescheduleScheduleFields || {}),
     };
     if (targetStatus === COMPLETED_BOOKING_STATUS) {
       setFields.actualEndDate = completionDate;
