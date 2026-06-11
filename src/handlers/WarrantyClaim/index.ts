@@ -44,6 +44,16 @@ const ACTIVE_CLAIM_STATUSES: WarrantyClaimStatus[] = [
   "escalated",
 ];
 
+const APPROVABLE_RESOLVE_STATUSES: WarrantyClaimStatus[] = [
+  "open",
+  "proposal_sent",
+  "proposal_accepted",
+  "escalated",
+];
+
+const isApprovableStatus = (status: WarrantyClaimStatus): boolean =>
+  APPROVABLE_RESOLVE_STATUSES.includes(status);
+
 const getWarrantyUploadKeyForUser = (userId: string) => `warranty-claims/${userId}/`;
 
 const isWarrantyUrlOwnedByUser = (url: string, userId: string) => {
@@ -1517,11 +1527,8 @@ export const adminApproveWarrantyResolve = async (req: Request, res: Response) =
 
     const claim = await WarrantyClaim.findById(claimId);
     if (!claim) return res.status(404).json({ success: false, msg: "Warranty claim not found" });
-    if (claim.status === "closed") {
-      return res.status(400).json({ success: false, msg: "Claim is already closed" });
-    }
-    if (claim.status === "resolved") {
-      return res.status(400).json({ success: false, msg: "Claim is already resolved" });
+    if (!isApprovableStatus(claim.status)) {
+      return res.status(400).json({ success: false, msg: `Claim cannot be resolved from status "${claim.status}"` });
     }
 
     const proposalSummary = claim.proposal?.message?.trim();
@@ -1604,8 +1611,8 @@ export const adminAdjustWarrantyResolve = async (req: Request, res: Response) =>
 
     const claim = await WarrantyClaim.findById(claimId);
     if (!claim) return res.status(404).json({ success: false, msg: "Warranty claim not found" });
-    if (claim.status === "closed") {
-      return res.status(400).json({ success: false, msg: "Claim is already closed" });
+    if (!isApprovableStatus(claim.status)) {
+      return res.status(400).json({ success: false, msg: `Claim cannot be resolved from status "${claim.status}"` });
     }
 
     if (trimmedDescription !== undefined || parsedResolveByDate !== undefined) {
