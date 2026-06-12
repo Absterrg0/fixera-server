@@ -3075,7 +3075,20 @@ export const getUnbookableStartDates = async ({
     return [];
   }
 
-  const durations = getProjectDurations(project, subprojectIndex);
+  let resolvedSubprojectIndex = subprojectIndex;
+  const projectExecutionValue = (project as any).executionDuration?.value;
+  if (
+    typeof resolvedSubprojectIndex !== "number" &&
+    (projectExecutionValue == null || projectExecutionValue <= 0) &&
+    Array.isArray((project as any).subprojects)
+  ) {
+    const daysSubIdx = (project as any).subprojects.findIndex(
+      (sp: any) => sp?.executionDuration?.unit === "days" && Number(sp?.executionDuration?.value) > 0
+    );
+    if (daysSubIdx >= 0) resolvedSubprojectIndex = daysSubIdx;
+  }
+
+  const durations = getProjectDurations(project, resolvedSubprojectIndex);
   if (!durations || !durations.execution?.value) {
     return [];
   }
