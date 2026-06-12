@@ -810,7 +810,7 @@ export const getMyBookings = async (req: Request, res: Response, next: NextFunct
       Booking.find(query)
         .populate('customer', 'name email phone customerType')
         .populate('professional', 'name email username businessInfo')
-        .populate('project', 'title description pricing category service timeMode')
+        .populate('project', 'title description pricing category service timeMode subprojects executionDuration')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parsedLimit),
