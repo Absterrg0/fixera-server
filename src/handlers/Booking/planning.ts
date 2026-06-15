@@ -117,14 +117,52 @@ const getUnavailableDatesForUser = async (userId: string, currentBookingId: stri
     }
   }
 
-  // 3. Add booking blocked ranges
+  // 3. Add booking blocked ranges / resource plans from other bookings
+  const otherBookings = await Booking.find({
+    _id: { $ne: new mongoose.Types.ObjectId(currentBookingId) },
+    status: { $nin: ["completed", "cancelled", "refunded"] },
+    $or: [
+      { professional: new mongoose.Types.ObjectId(userId) },
+      { assignedTeamMembers: new mongoose.Types.ObjectId(userId) },
+      { 'resourcePlan.resourceId': new mongoose.Types.ObjectId(userId) }
+    ]
+  }).select('resourcePlan');
+
+  const bookingsWithPlan = new Set<string>();
+  const bookingsWithoutPlan = new Set<string>();
+
+  for (const b of otherBookings) {
+    const bId = b._id.toString();
+    const hasResourcePlanForUser = Array.isArray(b.resourcePlan) && b.resourcePlan.some((p: any) => 
+      (p.resourceId?._id || p.resourceId)?.toString() === userId.toString()
+    );
+    if (hasResourcePlanForUser) {
+      bookingsWithPlan.add(bId);
+      const plan = b.resourcePlan || [];
+      for (const p of plan) {
+        if ((p.resourceId?._id || p.resourceId)?.toString() === userId.toString()) {
+          if (p.startDate && p.endDate) {
+            const days = getDaysBetween(new Date(p.startDate), new Date(p.endDate));
+            for (const day of days) {
+              dateSet.add(day);
+            }
+          }
+        }
+      }
+    } else {
+      bookingsWithoutPlan.add(bId);
+    }
+  }
+
   const bookingRanges = await buildBookingBlockedRanges(userId);
   for (const range of bookingRanges) {
     if (range.bookingId === currentBookingId) continue;
-    if (range.startDate && range.endDate) {
-      const days = getDaysBetween(new Date(range.startDate), new Date(range.endDate));
-      for (const day of days) {
-        dateSet.add(day);
+    if (range.bookingId && bookingsWithoutPlan.has(range.bookingId)) {
+      if (range.startDate && range.endDate) {
+        const days = getDaysBetween(new Date(range.startDate), new Date(range.endDate));
+        for (const day of days) {
+          dateSet.add(day);
+        }
       }
     }
   }
@@ -136,6 +174,14 @@ const resolveCandidateResources = async (booking: any) => {
   const professionalId = await resolveProfessionalId(booking);
   if (!professionalId) return [];
 
+  const projectId = booking.project?._id || booking.project;
+  if (!projectId) return [];
+  const project = await Project.findById(projectId).select('resources');
+  if (!project || !Array.isArray(project.resources) || project.resources.length === 0) {
+    return [];
+  }
+  const projectResourceIds = new Set(project.resources.map(id => id.toString()));
+
   const [professionalUser, employees] = await Promise.all([
     User.findById(professionalId).select('name email username'),
     User.find({
@@ -146,7 +192,7 @@ const resolveCandidateResources = async (booking: any) => {
   ]);
 
   const candidates: any[] = [];
-  if (professionalUser) {
+  if (professionalUser && projectResourceIds.has(professionalUser._id.toString())) {
     candidates.push({
       _id: professionalUser._id.toString(),
       name: professionalUser.name,
@@ -155,12 +201,14 @@ const resolveCandidateResources = async (booking: any) => {
     });
   }
   for (const emp of employees) {
-    candidates.push({
-      _id: emp._id.toString(),
-      name: emp.name,
-      email: emp.email,
-      username: emp.username,
-    });
+    if (projectResourceIds.has(emp._id.toString())) {
+      candidates.push({
+        _id: emp._id.toString(),
+        name: emp.name,
+        email: emp.email,
+        username: emp.username,
+      });
+    }
   }
   return candidates;
 };
@@ -291,6 +339,15 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       }
     }
 
+    // Pre-cache unavailable dates for all candidates
+    const unavailableDatesCache = new Map<string, Set<string>>();
+    await Promise.all(
+      Array.from(candidateIds).map(async (rid) => {
+        const dates = await getUnavailableDatesForUser(rid, booking._id.toString());
+        unavailableDatesCache.set(rid, new Set(dates));
+      })
+    );
+
     // 2. Add incoming planned days (filtering out any < today if in progress)
     for (const item of incomingPlan) {
       const resourceId = item?.resourceId != null ? String(item.resourceId) : '';
@@ -301,9 +358,18 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, error: { code: 'UNKNOWN_RESOURCE', message: 'Resource is not part of this project' } });
       }
       
-      const rawStart = parseDate(item?.startDate);
-      const rawEnd = parseDate(item?.endDate);
-      if (!rawStart || !rawEnd) {
+      if (typeof item?.startDate !== 'string' || typeof item?.endDate !== 'string') {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_DATE_FORMAT', message: 'Dates must be in YYYY-MM-DD format strings' } });
+      }
+
+      const yyyymmddRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!yyyymmddRegex.test(item.startDate) || !yyyymmddRegex.test(item.endDate)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_DATE_FORMAT', message: 'Dates must be in YYYY-MM-DD format strings' } });
+      }
+
+      const rawStart = parseUTCDate(item.startDate);
+      const rawEnd = parseUTCDate(item.endDate);
+      if (Number.isNaN(rawStart.getTime()) || Number.isNaN(rawEnd.getTime())) {
         return res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'Each resource needs a valid start and end date' } });
       }
       
@@ -324,11 +390,22 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       }
       const set = mergedResourceDays.get(resourceId)!;
       
+      const unavailableSet = unavailableDatesCache.get(resourceId) || new Set<string>();
+
       for (const d of days) {
         const dayDate = startOfDayUTC(new Date(d));
         if (isInProgress && dayDate < today) {
           // Skip/ignore any incoming day in the past if in progress
           continue;
+        }
+        if (unavailableSet.has(d)) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'RESOURCE_UNAVAILABLE',
+              message: `Resource is unavailable on ${d}`
+            }
+          });
         }
         set.add(d);
       }
@@ -356,7 +433,11 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
     for (const entry of normalizedPlan) {
       if (entry.endDate > maxEnd) maxEnd = entry.endDate;
     }
-    if (maxEnd <= bookingStart) {
+
+    // Check if the plan only consists of same-day allocations (each entry has startDate === endDate)
+    const isSameDayPlan = normalizedPlan.every(p => p.startDate.getTime() === p.endDate.getTime());
+
+    if (maxEnd <= bookingStart && !isSameDayPlan) {
       maxEnd = new Date(bookingStart.getTime() + 24 * 60 * 60 * 1000);
     }
 
