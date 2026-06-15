@@ -7,9 +7,10 @@ import { Request, Response } from 'express';
 import Booking, { BookingStatus } from '../../models/booking';
 import Payment from '../../models/payment';
 import Project from '../../models/project';
+import PlatformSettings from '../../models/platformSettings';
 import { createPaymentIntent, captureAndTransferPayment, executeRefund, RefundError } from '../Stripe/payment';
 import { stripe } from '../../services/stripe';
-import { generateIdempotencyKey } from '../../utils/payment';
+import { generateIdempotencyKey, computeGrossBookingAmount } from '../../utils/payment';
 import { processReferralCompletion } from '../../utils/referralSystem';
 import { updateProfessionalLevel } from '../../utils/professionalLevelSystem';
 import { addPoints } from '../../utils/pointsSystem';
@@ -920,11 +921,25 @@ export const ensurePaymentIntent = async (req: Request, res: Response) => {
     const storedPoints = Number((booking.payment as any)?.discount?.pointsRedeemed) || 0;
     const pointsMatchStored = storedPoints === requestedPoints;
 
+    let commissionPercent = 0;
+    try {
+      const platformConfig = await PlatformSettings.getCurrentConfig();
+      commissionPercent = platformConfig.commissionPercent;
+    } catch {
+      const parsed = Number.parseFloat(process.env.STRIPE_PLATFORM_COMMISSION_PERCENT || '0');
+      commissionPercent = Number.isFinite(parsed) ? parsed : 0;
+    }
+    const hasMilestones = Array.isArray(booking.milestonePayments) && booking.milestonePayments.length > 0;
+    const expectedGrossAmount = computeGrossBookingAmount(booking, commissionPercent);
+    const existingOriginalAmount = booking.payment?.discount?.originalAmount ?? booking.payment?.netAmount ?? 0;
+    const amountMatches = hasMilestones || Math.abs(expectedGrossAmount - existingOriginalAmount) < 0.01;
+
     if (
       booking.payment?.stripeClientSecret &&
       booking.payment.status === 'pending' &&
       codeMatchesStored &&
-      pointsMatchStored
+      pointsMatchStored &&
+      amountMatches
     ) {
       return res.json({
         success: true,

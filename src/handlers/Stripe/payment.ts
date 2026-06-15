@@ -184,46 +184,6 @@ export const createPaymentIntent = async (
       && booking.milestonePayments.length > 0
       && booking.milestonePayments.some((m: any) => m.status !== 'paid');
 
-    if (booking.payment?.stripePaymentIntentId && booking.payment?.stripeClientSecret) {
-      if (['authorized', 'completed'].includes(booking.payment.status) && !hasUnpaidMilestones) {
-        return {
-          success: false,
-          error: {
-            code: 'PAYMENT_ALREADY_PROCESSED',
-            message: 'Payment has already been processed for this booking'
-          }
-        };
-      }
-      const isMatchingPendingMilestoneIntent =
-        typeof requestedMilestoneIndex === 'number'
-          ? booking.payment.milestoneIndex === requestedMilestoneIndex
-          : true;
-      const storedCodeLabel = (booking.payment as any)?.discount?.codeLabel;
-      const requestedCodeLabel = discountCode ? discountCode.trim().toUpperCase() : undefined;
-      const codeMatches = (storedCodeLabel || undefined) === (requestedCodeLabel || undefined);
-      const storedPoints = Number((booking.payment as any)?.discount?.pointsRedeemed) || 0;
-      const pointsMatch = storedPoints === (Number(pointsToRedeem) || 0);
-      if (booking.payment.status === 'pending' && isMatchingPendingMilestoneIntent && codeMatches && pointsMatch) {
-        console.log(`♻️  Reusing existing PaymentIntent for booking ${booking._id}: ${booking.payment.stripePaymentIntentId}`);
-        return {
-          success: true,
-          clientSecret: booking.payment.stripeClientSecret,
-          paymentIntentId: booking.payment.stripePaymentIntentId,
-          milestoneIndex: typeof booking.payment.milestoneIndex === 'number' ? booking.payment.milestoneIndex : null,
-        };
-      }
-      if (booking.payment.status === 'pending') {
-        try {
-          await stripe.paymentIntents.cancel(booking.payment.stripePaymentIntentId);
-          console.log(`🗑️  Cancelled superseded PaymentIntent ${booking.payment.stripePaymentIntentId} for booking ${booking._id}`);
-        } catch (cancelErr: any) {
-          if (cancelErr?.code !== 'payment_intent_unexpected_state' && cancelErr?.code !== 'resource_missing') {
-            console.warn(`Failed to cancel superseded PaymentIntent: ${cancelErr?.message || cancelErr}`);
-          }
-        }
-      }
-    }
-
     const allowedStatuses = hasUnpaidMilestones
       ? ['quote_accepted', 'payment_pending', 'booked', 'in_progress', 'professional_completed']
       : ['quote_accepted', 'payment_pending', 'booked'];
@@ -337,6 +297,51 @@ export const createPaymentIntent = async (
         }
       } else {
         chargeAmount += commissionedExtraOptionsTotal;
+      }
+    }
+
+    if (booking.payment?.stripePaymentIntentId && booking.payment?.stripeClientSecret) {
+      if (['authorized', 'completed'].includes(booking.payment.status) && !hasUnpaidMilestones) {
+        return {
+          success: false,
+          error: {
+            code: 'PAYMENT_ALREADY_PROCESSED',
+            message: 'Payment has already been processed for this booking'
+          }
+        };
+      }
+      const isMatchingPendingMilestoneIntent =
+        typeof requestedMilestoneIndex === 'number'
+          ? booking.payment.milestoneIndex === requestedMilestoneIndex
+          : true;
+      const storedCodeLabel = (booking.payment as any)?.discount?.codeLabel;
+      const requestedCodeLabel = discountCode ? discountCode.trim().toUpperCase() : undefined;
+      const codeMatches = (storedCodeLabel || undefined) === (requestedCodeLabel || undefined);
+      const storedPoints = Number((booking.payment as any)?.discount?.pointsRedeemed) || 0;
+      const pointsMatch = storedPoints === (Number(pointsToRedeem) || 0);
+
+      // Verify that the charge amount matches the original amount of the pending payment intent
+      const existingOriginalAmount = booking.payment?.discount?.originalAmount ?? booking.payment?.netAmount ?? 0;
+      const amountMatches = Math.abs(chargeAmount - existingOriginalAmount) < 0.01;
+
+      if (booking.payment.status === 'pending' && isMatchingPendingMilestoneIntent && codeMatches && pointsMatch && amountMatches) {
+        console.log(`♻️  Reusing existing PaymentIntent for booking ${booking._id}: ${booking.payment.stripePaymentIntentId}`);
+        return {
+          success: true,
+          clientSecret: booking.payment.stripeClientSecret,
+          paymentIntentId: booking.payment.stripePaymentIntentId,
+          milestoneIndex: typeof booking.payment.milestoneIndex === 'number' ? booking.payment.milestoneIndex : null,
+        };
+      }
+      if (booking.payment.status === 'pending') {
+        try {
+          await stripe.paymentIntents.cancel(booking.payment.stripePaymentIntentId);
+          console.log(`🗑️  Cancelled superseded PaymentIntent ${booking.payment.stripePaymentIntentId} for booking ${booking._id}`);
+        } catch (cancelErr: any) {
+          if (cancelErr?.code !== 'payment_intent_unexpected_state' && cancelErr?.code !== 'resource_missing') {
+            console.warn(`Failed to cancel superseded PaymentIntent: ${cancelErr?.message || cancelErr}`);
+          }
+        }
       }
     }
 
