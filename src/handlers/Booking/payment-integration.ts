@@ -929,9 +929,10 @@ export const ensurePaymentIntent = async (req: Request, res: Response) => {
       const parsed = Number.parseFloat(process.env.STRIPE_PLATFORM_COMMISSION_PERCENT || '0');
       commissionPercent = Number.isFinite(parsed) ? parsed : 0;
     }
+    const hasMilestones = Array.isArray(booking.milestonePayments) && booking.milestonePayments.length > 0;
     const expectedGrossAmount = computeGrossBookingAmount(booking, commissionPercent);
     const existingOriginalAmount = booking.payment?.discount?.originalAmount ?? booking.payment?.netAmount ?? 0;
-    const amountMatches = Math.abs(expectedGrossAmount - existingOriginalAmount) < 0.01;
+    const amountMatches = hasMilestones || Math.abs(expectedGrossAmount - existingOriginalAmount) < 0.01;
 
     if (
       booking.payment?.stripeClientSecret &&
