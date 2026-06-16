@@ -47,12 +47,14 @@ const resolveCandidateResources = async (booking: any) => {
   const users = await User.find({ _id: { $in: validIds } }).select('name email username');
 
   // Fetch other active bookings for these resources
+  const validObjectIds = validIds.map(id => new mongoose.Types.ObjectId(id));
+
   const otherBookings = await Booking.find({
     _id: { $ne: booking._id },
     status: { $nin: ['completed', 'cancelled', 'refunded'] },
     $or: [
-      { assignedTeamMembers: { $in: validIds } },
-      { professional: { $in: validIds } }
+      { assignedTeamMembers: { $in: validObjectIds } },
+      { professional: { $in: validObjectIds } }
     ],
     scheduledStartDate: { $exists: true, $ne: null }
   }).populate('project', 'title');
