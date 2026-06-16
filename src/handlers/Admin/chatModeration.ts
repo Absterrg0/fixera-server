@@ -474,6 +474,52 @@ export const adminGetBookingConversation = async (req: Request, res: Response) =
   }
 };
 
+export const adminListSupportConversations = async (req: Request, res: Response) => {
+  try {
+    const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
+    const adminId = adminIdRaw?.toString();
+    if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
+      return res.status(401).json({ success: false, msg: "Unauthorized" });
+    }
+    const adminObjectId = new mongoose.Types.ObjectId(adminId);
+    const { page, limit, skip } = parsePagination(req.query);
+
+    const filter = {
+      type: "support",
+      status: "active",
+      supportAdminId: adminObjectId,
+    };
+
+    const [conversations, total] = await Promise.all([
+      Conversation.find(filter)
+        .sort({ lastMessageAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("supportTargetUserId", "name email")
+        .select("_id supportTargetUserId lastMessagePreview lastMessageAt lastMessageSenderId")
+        .lean(),
+      Conversation.countDocuments(filter),
+    ]);
+
+    const items = conversations.map((c: any) => {
+      const targetId = c.supportTargetUserId?._id?.toString();
+      const senderId = c.lastMessageSenderId?.toString();
+      return {
+        _id: c._id,
+        supportTargetUserId: c.supportTargetUserId,
+        lastMessagePreview: c.lastMessagePreview || "",
+        lastMessageAt: c.lastMessageAt || null,
+        awaitingReply: Boolean(targetId && senderId && targetId === senderId),
+      };
+    });
+
+    return res.json({ success: true, data: { items, total, page, limit } });
+  } catch (error: any) {
+    console.error("Admin list support conversations error:", error);
+    return res.status(500).json({ success: false, msg: "Failed to load support conversations" });
+  }
+};
+
 export const adminGetSupportUnreadCount = async (req: Request, res: Response) => {
   try {
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;

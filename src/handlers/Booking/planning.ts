@@ -3,9 +3,11 @@ import mongoose from 'mongoose';
 import Booking, { BookingStatus } from '../../models/booking';
 import Project from '../../models/project';
 import User from '../../models/user';
-import { buildBookingBlockedRanges } from '../../utils/bookingBlocks';
+import { buildPerResourceBlockedDays } from '../../utils/scheduleEngine';
 
-const PLANNING_ACTIVE_STATUSES: BookingStatus[] = ['booked', 'in_progress'];
+const PLANNING_ACTIVE_STATUSES: BookingStatus[] = ['booked', 'rescheduling_requested', 'in_progress', 'professional_completed'];
+
+const WINDOW_MARGIN_DAYS = 14;
 
 const startOfDayUTC = (value: Date): Date => {
   const d = new Date(value);
@@ -13,58 +15,28 @@ const startOfDayUTC = (value: Date): Date => {
   return d;
 };
 
-const parseStrictUTCDate = (dateStr: string): Date | null => {
-  const yyyymmddRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!yyyymmddRegex.test(dateStr)) return null;
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const d = new Date(Date.UTC(year, month - 1, day));
+const formatDayKey = (value: Date): string => {
+  const d = startOfDayUTC(value);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDayKey = (value: unknown): Date | null => {
+  if (typeof value !== 'string') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) return null;
-  const expectedStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-  if (expectedStr !== dateStr) return null;
+  const [y, m, day] = value.split('-').map(Number);
+  if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== m || d.getUTCDate() !== day) return null;
   return d;
 };
 
-const parseUTCDate = (dateStr: string): Date => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-};
-
-const getDaysBetween = (start: Date, end: Date): string[] => {
-  const dates: string[] = [];
-  const curr = new Date(startOfDayUTC(start));
-  const last = new Date(startOfDayUTC(end));
-
-  while (curr <= last) {
-    dates.push(curr.toISOString().slice(0, 10));
-    curr.setUTCDate(curr.getUTCDate() + 1);
-  }
-  return dates;
-};
-
-const getContiguousRanges = (dateStrings: string[]): Array<{ startDate: string; endDate: string }> => {
-  if (dateStrings.length === 0) return [];
-  const sorted = [...dateStrings].sort();
-  const ranges: Array<{ startDate: string; endDate: string }> = [];
-  
-  let currentStart = sorted[0];
-  let currentEnd = sorted[0];
-  
-  for (let i = 1; i < sorted.length; i++) {
-    const dateA = parseUTCDate(currentEnd);
-    const dateB = parseUTCDate(sorted[i]);
-    const diffTime = Math.abs(dateB.getTime() - dateA.getTime());
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 1) {
-      currentEnd = sorted[i];
-    } else {
-      ranges.push({ startDate: currentStart, endDate: currentEnd });
-      currentStart = sorted[i];
-      currentEnd = sorted[i];
-    }
-  }
-  ranges.push({ startDate: currentStart, endDate: currentEnd });
-  return ranges;
+const addDays = (value: Date, days: number): Date => {
+  const d = startOfDayUTC(value);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
 };
 
 const resolveProfessionalId = async (booking: any): Promise<string | undefined> => {
@@ -77,241 +49,146 @@ const resolveProfessionalId = async (booking: any): Promise<string | undefined> 
   return project?.professionalId?.toString?.() || (project?.professionalId as any);
 };
 
-const isDaysModeForBooking = (booking: any, project: any): boolean => {
-  if (!project) return false;
-  const subprojects = project.subprojects;
-  const selectedIndex = booking.selectedSubprojectIndex;
-  let unit: 'hours' | 'days' | undefined;
-  if (subprojects && subprojects.length > 0) {
-    const sub =
-      typeof selectedIndex === 'number'
-        ? subprojects[selectedIndex]
-        : subprojects.length === 1
-        ? subprojects[0]
-        : undefined;
-    unit = sub?.executionDuration?.unit;
-  }
-  if (!unit) unit = project.executionDuration?.unit;
-  if (unit) return unit === 'days';
-  return project.timeMode === 'days';
-};
-
-const fetchBookedSlotsForResources = async (validIds: string[], currentBookingId: string) => {
-  if (validIds.length === 0) return new Map<string, any[]>();
-  
-  const validObjectIds = validIds.map(id => new mongoose.Types.ObjectId(id));
-
-  const otherBookings = await Booking.find({
-    _id: { $ne: new mongoose.Types.ObjectId(currentBookingId) },
-    status: { $nin: ['completed', 'cancelled', 'refunded'] },
-    $or: [
-      { assignedTeamMembers: { $in: validObjectIds } },
-      { professional: { $in: validObjectIds } },
-      { 'resourcePlan.resourceId': { $in: validObjectIds } }
-    ],
-    scheduledStartDate: { $exists: true, $ne: null }
-  }).populate('project', 'title');
-
-  const bookedSlotsMap = new Map<string, any[]>();
-  for (const other of otherBookings) {
-    const otherProjTitle = (other.project as any)?.title || 'Direct Booking';
-    const planEntries = Array.isArray(other.resourcePlan) ? other.resourcePlan : [];
-    
-    const relevantResourceIds = new Set<string>();
-    if (other.professional) relevantResourceIds.add(other.professional.toString());
-    (other.assignedTeamMembers || []).forEach((id: any) => relevantResourceIds.add(id.toString()));
-    planEntries.forEach((entry: any) => {
-      const rid = (entry.resourceId?._id || entry.resourceId)?.toString();
-      if (rid) relevantResourceIds.add(rid);
-    });
-    
-    for (const rid of relevantResourceIds) {
-      if (!validIds.includes(rid)) continue;
-      
-      const planEntry = planEntries.find((entry: any) => {
-        const entryRid = (entry.resourceId?._id || entry.resourceId)?.toString();
-        return entryRid === rid;
-      });
-      
-      let start = other.scheduledStartDate;
-      let end = other.scheduledExecutionEndDate || other.scheduledBufferEndDate || other.scheduledStartDate;
-      
-      if (planEntry) {
-        start = planEntry.startDate;
-        end = planEntry.endDate;
-      }
-      
-      if (!start || !end) continue;
-      
-      const list = bookedSlotsMap.get(rid) || [];
-      list.push({
-        bookingId: other._id.toString(),
-        bookingNumber: other.bookingNumber || 'BK-' + other._id.toString().slice(-6),
-        projectTitle: otherProjTitle,
-        startDate: start,
-        endDate: end
-      });
-      bookedSlotsMap.set(rid, list);
-    }
-  }
-  return bookedSlotsMap;
-};
-
-const getUnavailableDatesForUser = async (userId: string, currentBookingId: string): Promise<string[]> => {
-  const user = await User.findById(userId).select('blockedDates blockedRanges');
-  if (!user) return [];
-
-  const dateSet = new Set<string>();
-
-  // 1. Add blockedDates
-  if (Array.isArray(user.blockedDates)) {
-    for (const entry of user.blockedDates) {
-      if (entry.date) {
-        const d = new Date(entry.date);
-        if (!isNaN(d.getTime())) {
-          dateSet.add(d.toISOString().slice(0, 10));
-        }
-      }
-    }
-  }
-
-  // 2. Add blockedRanges
-  if (Array.isArray(user.blockedRanges)) {
-    for (const range of user.blockedRanges) {
-      if (range.startDate && range.endDate) {
-        const days = getDaysBetween(range.startDate, range.endDate);
-        for (const day of days) {
-          dateSet.add(day);
-        }
-      }
-    }
-  }
-
-  // 3. Add booking blocked ranges / resource plans from other bookings
-  const otherBookings = await Booking.find({
-    _id: { $ne: new mongoose.Types.ObjectId(currentBookingId) },
-    status: { $nin: ["completed", "cancelled", "refunded"] },
-    $or: [
-      { professional: new mongoose.Types.ObjectId(userId) },
-      { professional: userId.toString() },
-      { assignedTeamMembers: new mongoose.Types.ObjectId(userId) },
-      { assignedTeamMembers: userId.toString() },
-      { 'resourcePlan.resourceId': new mongoose.Types.ObjectId(userId) },
-      { 'resourcePlan.resourceId': userId.toString() }
-    ]
-  }).select('resourcePlan');
-
-  const bookingsWithPlan = new Set<string>();
-  const bookingsWithoutPlan = new Set<string>();
-
-  for (const b of otherBookings) {
-    const bId = b._id.toString();
-    const hasResourcePlanForUser = Array.isArray(b.resourcePlan) && b.resourcePlan.some((p: any) => 
-      (p.resourceId?._id || p.resourceId)?.toString() === userId.toString()
-    );
-    if (hasResourcePlanForUser) {
-      bookingsWithPlan.add(bId);
-      const plan = b.resourcePlan || [];
-      for (const p of plan) {
-        if ((p.resourceId?._id || p.resourceId)?.toString() === userId.toString()) {
-          if (p.startDate && p.endDate) {
-            const days = getDaysBetween(new Date(p.startDate), new Date(p.endDate));
-            for (const day of days) {
-              dateSet.add(day);
-            }
-          }
-        }
-      }
-    } else {
-      bookingsWithoutPlan.add(bId);
-    }
-  }
-
-  const bookingRanges = await buildBookingBlockedRanges(userId);
-  for (const range of bookingRanges) {
-    if (range.bookingId === currentBookingId) continue;
-    if (range.bookingId && bookingsWithoutPlan.has(range.bookingId)) {
-      if (range.startDate && range.endDate) {
-        const days = getDaysBetween(new Date(range.startDate), new Date(range.endDate));
-        for (const day of days) {
-          dateSet.add(day);
-        }
-      }
-    }
-  }
-
-  return Array.from(dateSet);
-};
-
 const resolveCandidateResources = async (booking: any) => {
   const professionalId = await resolveProfessionalId(booking);
-  if (!professionalId) return [];
+  if (!professionalId || !mongoose.isValidObjectId(professionalId)) return [];
 
-  const [professionalUser, employees] = await Promise.all([
-    User.findById(professionalId).select('name email username'),
-    User.find({
-      role: 'employee',
-      'employee.companyId': professionalId,
-      'employee.isActive': true
-    }).select('name email username')
-  ]);
+  const resources: { _id: string; name: string }[] = [];
+  const seen = new Set<string>();
 
-  const candidates: any[] = [];
-  if (professionalUser) {
-    candidates.push({
-      _id: professionalUser._id.toString(),
-      name: professionalUser.name,
-      email: professionalUser.email,
-      username: professionalUser.username,
+  const professional = await User.findById(professionalId).select('name email username');
+  if (professional) {
+    const id = professional._id.toString();
+    seen.add(id);
+    resources.push({
+      _id: id,
+      name: (professional as any).name || (professional as any).username || (professional as any).email || id,
     });
   }
+
+  const employees = await User.find({
+    role: 'employee',
+    'employee.companyId': professionalId,
+    'employee.isActive': true,
+  }).select('name email username');
+
   for (const emp of employees) {
-    candidates.push({
-      _id: emp._id.toString(),
-      name: emp.name,
-      email: emp.email,
-      username: emp.username,
+    const id = emp._id.toString();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    resources.push({
+      _id: id,
+      name: (emp as any).name || (emp as any).username || (emp as any).email || id,
     });
   }
-  return candidates;
+
+  return resources;
 };
 
-const buildPlanningPayload = async (booking: any) => {
+const resolveExecutionDays = (project: any, booking: any): number => {
+  let execution = project?.executionDuration;
+  const subIndex = booking?.selectedSubprojectIndex;
+  if (
+    typeof subIndex === 'number' &&
+    Array.isArray(project?.subprojects) &&
+    project.subprojects[subIndex]?.executionDuration
+  ) {
+    execution = project.subprojects[subIndex].executionDuration;
+  }
+  if (!execution) return 1;
+  const value =
+    typeof execution.value === 'number' && execution.value > 0
+      ? execution.value
+      : execution.range?.max || execution.range?.min || 1;
+  return Math.max(1, Math.ceil(value));
+};
+
+const resolveTimeZone = (professional: any): string => {
+  return professional?.businessInfo?.timezone || 'UTC';
+};
+
+const getPlannedDayKeys = (booking: any): Map<string, Set<string>> => {
+  const map = new Map<string, Set<string>>();
+  const plan: any[] = Array.isArray(booking.resourcePlan) ? booking.resourcePlan : [];
+  for (const entry of plan) {
+    const rid = (entry?.resourceId?._id || entry?.resourceId)?.toString?.();
+    if (!rid) continue;
+    const set = map.get(rid) || new Set<string>();
+    const days: any[] = Array.isArray(entry?.days) ? entry.days : [];
+    for (const day of days) {
+      const d = new Date(day);
+      if (Number.isNaN(d.getTime())) continue;
+      set.add(formatDayKey(d));
+    }
+    map.set(rid, set);
+  }
+  return map;
+};
+
+const buildWindow = (booking: any, project: any) => {
+  const today = startOfDayUTC(new Date());
+  const rawStart = booking.scheduledStartDate ? startOfDayUTC(booking.scheduledStartDate) : null;
+  const isInProgress = booking.status === 'in_progress' || booking.status === 'professional_completed';
+
+  const startDate = rawStart || today;
+  const windowFrom = isInProgress && today > startDate ? startDate : startDate;
+
+  const executionDays = resolveExecutionDays(project, booking);
+  const plannedEnd = booking.scheduledExecutionEndDate ? startOfDayUTC(booking.scheduledExecutionEndDate) : null;
+  const execEnd = addDays(startDate, executionDays);
+  let windowTo = execEnd;
+  if (plannedEnd && plannedEnd > windowTo) windowTo = plannedEnd;
+  if (windowTo < startDate) windowTo = startDate;
+  windowTo = addDays(windowTo, WINDOW_MARGIN_DAYS);
+
+  return { startDate, windowFrom, windowTo, isInProgress };
+};
+
+const buildPlanningPayload = async (booking: any, professional: any, project: any) => {
   const candidateResources = await resolveCandidateResources(booking);
-  const candidateResourcesWithAvailability = await Promise.all(
-    candidateResources.map(async (c) => {
-      const unavailableDates = await getUnavailableDatesForUser(c._id, booking._id.toString());
-      return {
-        ...c,
-        unavailableDates,
-      };
-    })
-  );
+  const resourceIds = candidateResources.map((r) => r._id);
+  const { startDate, windowFrom, windowTo, isInProgress } = buildWindow(booking, project);
+  const timeZone = resolveTimeZone(professional);
+
+  let blockedByResource: Map<string, Set<string>> = new Map();
+  if (resourceIds.length > 0) {
+    blockedByResource = await buildPerResourceBlockedDays(
+      project,
+      professional,
+      resourceIds,
+      windowFrom,
+      windowTo,
+      timeZone,
+      booking._id.toString(),
+      booking.customerBlocks
+    );
+  }
+
+  const plannedByResource = getPlannedDayKeys(booking);
+
+  const customer = booking.customer && (booking.customer.name || booking.customer.email)
+    ? booking.customer
+    : null;
+  const customerName = customer
+    ? (customer.name || customer.username || customer.email || 'Customer')
+    : 'Customer';
 
   return {
     bookingId: booking._id.toString(),
-    bookingNumber: booking.bookingNumber,
-    customerName: booking.customer?.name || '',
+    bookingNumber: booking.bookingNumber || '',
+    customerName,
     status: booking.status,
-    scheduledStartDate: booking.scheduledStartDate,
-    scheduledExecutionEndDate: booking.scheduledExecutionEndDate,
-    scheduledBufferStartDate: booking.scheduledBufferStartDate,
-    scheduledBufferEndDate: booking.scheduledBufferEndDate,
-    assignedTeamMembers: Array.isArray(booking.assignedTeamMembers)
-      ? booking.assignedTeamMembers.map((m: any) => ({
-          _id: (m?._id || m)?.toString?.(),
-          name: m?.name,
-          email: m?.email,
-        }))
-      : [],
-    resourcePlan: Array.isArray(booking.resourcePlan)
-      ? booking.resourcePlan.map((p: any) => ({
-          resourceId: (p?.resourceId?._id || p?.resourceId)?.toString?.(),
-          startDate: p?.startDate,
-          endDate: p?.endDate,
-        }))
-      : [],
-    candidateResources: candidateResourcesWithAvailability,
+    startDate: formatDayKey(startDate),
+    windowFrom: formatDayKey(windowFrom),
+    windowTo: formatDayKey(windowTo),
+    today: formatDayKey(startOfDayUTC(new Date())),
+    isInProgress,
+    resources: candidateResources.map((r) => ({
+      _id: r._id,
+      name: r.name,
+      blockedDays: Array.from(blockedByResource.get(r._id) || new Set<string>()).sort(),
+      plannedDays: Array.from(plannedByResource.get(r._id) || new Set<string>()).sort(),
+    })),
   };
 };
 
@@ -331,17 +208,11 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
     }
 
     const booking = await Booking.findById(bookingId)
-      .populate('professional', '_id name email')
-      .populate('assignedTeamMembers', 'name email')
-      .populate('customer', 'name email');
+      .populate('professional', '_id name email username businessInfo companyAvailability availability companyBlockedDates companyBlockedRanges')
+      .populate('customer', '_id name email username');
 
     if (!booking) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Booking not found' } });
-    }
-
-    const project = await Project.findById(booking.project);
-    if (!project || !isDaysModeForBooking(booking, project)) {
-      return res.status(400).json({ success: false, error: { code: 'INVALID_MODE', message: 'Planning is only available for days-mode projects' } });
     }
 
     const professionalId = await resolveProfessionalId(booking);
@@ -353,217 +224,162 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Planning is only available before completion' } });
     }
 
+    if (booking.bookingType !== 'project' || !booking.project) {
+      return res.status(400).json({ success: false, error: { code: 'NOT_PROJECT', message: 'Planning is only available for project bookings' } });
+    }
+
+    const projectId = booking.project?._id?.toString?.() || booking.project?.toString?.();
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found' } });
+    }
+
+    let professional: any = (booking.professional && (booking.professional as any).businessInfo !== undefined)
+      ? booking.professional
+      : null;
+    if (!professional) {
+      professional = await User.findById(professionalId).select(
+        'name email username businessInfo companyAvailability availability companyBlockedDates companyBlockedRanges'
+      );
+    }
+
     if (load) {
-      const payload = await buildPlanningPayload(booking);
+      const payload = await buildPlanningPayload(booking, professional, project);
       return res.json({ success: true, data: payload });
     }
 
-    if (!Array.isArray(incomingPlan) || incomingPlan.length === 0) {
-      return res.status(400).json({ success: false, error: { code: 'EMPTY_PLAN', message: 'At least one resource is required in the plan' } });
+    if (!Array.isArray(incomingPlan)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_PLAN', message: 'A resource plan is required' } });
     }
 
     const candidateResources = await resolveCandidateResources(booking);
     const candidateIds = new Set(candidateResources.map((c) => c._id));
     if (candidateIds.size === 0) {
-      return res.status(400).json({ success: false, error: { code: 'NO_PROJECT_RESOURCES', message: 'This project has no resources available to plan' } });
+      return res.status(400).json({ success: false, error: { code: 'NO_RESOURCES', message: 'This booking has no resources available to plan' } });
     }
 
-    const bookingStart = booking.scheduledStartDate ? startOfDayUTC(booking.scheduledStartDate) : null;
-    if (!bookingStart) {
-      return res.status(400).json({ success: false, error: { code: 'NO_START', message: 'Booking has no scheduled start date' } });
-    }
-
+    const { startDate, windowFrom, windowTo, isInProgress } = buildWindow(booking, project);
     const today = startOfDayUTC(new Date());
-    const isInProgress = booking.status === 'in_progress';
+    const timeZone = resolveTimeZone(professional);
 
-    const existingPlan: any[] = Array.isArray(booking.resourcePlan) ? booking.resourcePlan : [];
-    const existingById: Record<string, any> = {};
-    for (const entry of existingPlan) {
-      const rid = (entry?.resourceId?._id || entry?.resourceId)?.toString?.();
-      if (rid) existingById[rid] = entry;
-    }
-
-    const mergedResourceDays = new Map<string, Set<string>>();
-    const seenResource = new Set<string>();
-
-    // 1. If in progress, populate with existing planned days that are in the past (< today)
-    if (isInProgress) {
-      for (const entry of existingPlan) {
-        const rid = (entry?.resourceId?._id || entry?.resourceId)?.toString?.();
-        if (!rid) continue;
-        
-        const start = startOfDayUTC(entry.startDate);
-        const end = startOfDayUTC(entry.endDate);
-        
-        if (start < today) {
-          const lastPastDate = end < today ? end : new Date(today.getTime() - 24 * 60 * 60 * 1000);
-          const days = getDaysBetween(start, lastPastDate);
-          if (!mergedResourceDays.has(rid)) {
-            mergedResourceDays.set(rid, new Set());
-          }
-          const set = mergedResourceDays.get(rid)!;
-          for (const d of days) {
-            set.add(d);
-          }
-        }
-      }
-    }
-
-    // Pre-cache unavailable dates for all candidates
-    const unavailableDatesCache = new Map<string, Set<string>>();
-    await Promise.all(
-      Array.from(candidateIds).map(async (rid) => {
-        const dates = await getUnavailableDatesForUser(rid, booking._id.toString());
-        unavailableDatesCache.set(rid, new Set(dates));
-      })
+    const resourceIds = candidateResources.map((r) => r._id);
+    const blockedByResource = await buildPerResourceBlockedDays(
+      project,
+      professional,
+      resourceIds,
+      windowFrom,
+      windowTo,
+      timeZone,
+      booking._id.toString(),
+      booking.customerBlocks
     );
 
-    // 2. Add incoming planned days (filtering out any < today if in progress)
+    const existingPlanned = getPlannedDayKeys(booking);
+
+    const normalizedPlan: { resourceId: mongoose.Types.ObjectId; days: Date[] }[] = [];
+    const seenResource = new Set<string>();
+    let maxDay: Date | null = null;
+
     for (const item of incomingPlan) {
       const resourceId = item?.resourceId != null ? String(item.resourceId) : '';
       if (!mongoose.isValidObjectId(resourceId)) {
         return res.status(400).json({ success: false, error: { code: 'INVALID_RESOURCE', message: 'Invalid resource in plan' } });
       }
       if (!candidateIds.has(resourceId)) {
-        return res.status(400).json({ success: false, error: { code: 'UNKNOWN_RESOURCE', message: 'Resource is not part of this project' } });
+        return res.status(400).json({ success: false, error: { code: 'UNKNOWN_RESOURCE', message: 'Resource is not part of this booking' } });
       }
-      
-      if (typeof item?.startDate !== 'string' || typeof item?.endDate !== 'string') {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_DATE_FORMAT', message: 'Dates must be in YYYY-MM-DD format strings' } });
-      }
-
-      const yyyymmddRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!yyyymmddRegex.test(item.startDate) || !yyyymmddRegex.test(item.endDate)) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_DATE_FORMAT', message: 'Dates must be in YYYY-MM-DD format strings' } });
-      }
-
-      const rawStart = parseStrictUTCDate(item.startDate);
-      const rawEnd = parseStrictUTCDate(item.endDate);
-      if (!rawStart || !rawEnd) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'Each resource needs a valid start and end date' } });
-      }
-      
-      const start = startOfDayUTC(rawStart);
-      const end = startOfDayUTC(rawEnd);
-
-      const diffTime = Math.abs(end.getTime() - start.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays > 90) {
-        return res.status(400).json({ success: false, error: { code: 'DATE_SPAN_TOO_LARGE', message: 'The planning date span cannot exceed 90 days.' } });
-      }
-      
-      if (start < bookingStart) {
-        return res.status(400).json({ success: false, error: { code: 'BEFORE_START', message: 'A resource cannot start before the booking start date' } });
-      }
-      if (end < start) {
-        return res.status(400).json({ success: false, error: { code: 'END_BEFORE_START', message: 'A resource end date cannot be before its start date' } });
+      if (seenResource.has(resourceId)) {
+        return res.status(400).json({ success: false, error: { code: 'DUPLICATE_RESOURCE', message: 'A resource can only appear once in the plan' } });
       }
       seenResource.add(resourceId);
 
+      const rawDays: any[] = Array.isArray(item?.days) ? item.days : [];
+      const blocked = blockedByResource.get(resourceId) || new Set<string>();
+      const previous = existingPlanned.get(resourceId) || new Set<string>();
+      const dayKeys = new Set<string>();
+
+      for (const raw of rawDays) {
+        const parsed = parseDayKey(raw);
+        if (!parsed) {
+          return res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'Each planned day must be a valid YYYY-MM-DD date' } });
+        }
+        const key = formatDayKey(parsed);
+        if (parsed < windowFrom || parsed > windowTo) {
+          return res.status(400).json({ success: false, error: { code: 'OUT_OF_WINDOW', message: 'A planned day is outside the allowed window' } });
+        }
+        if (blocked.has(key)) {
+          return res.status(400).json({ success: false, error: { code: 'BLOCKED_DAY', message: 'A planned day is unavailable for that resource' } });
+        }
+        dayKeys.add(key);
+      }
+
       if (isInProgress) {
-        const existing = existingById[resourceId];
-        const isUsed = existing && startOfDayUTC(existing.startDate) <= today;
-        if (isUsed && existing && startOfDayUTC(existing.startDate).getTime() !== start.getTime()) {
-          return res.status(400).json({ success: false, error: { code: 'START_LOCKED', message: 'A resource already in use cannot have its start date changed' } });
-        }
-        if (isUsed && end < today) {
-          return res.status(400).json({ success: false, error: { code: 'PAST_LOCKED', message: 'A resource already in use cannot end before today' } });
-        }
-        if (!existing && start < today) {
-          return res.status(400).json({ success: false, error: { code: 'PAST_ADD', message: 'New resources can only start from today onward' } });
+        const allKeys = new Set<string>([...dayKeys, ...previous]);
+        for (const key of allKeys) {
+          const d = parseDayKey(key);
+          if (!d || d >= today) continue;
+          const wasPlanned = previous.has(key);
+          const isPlanned = dayKeys.has(key);
+          if (wasPlanned !== isPlanned) {
+            return res.status(400).json({ success: false, error: { code: 'PAST_LOCKED', message: 'Days before today cannot be changed while work is in progress' } });
+          }
         }
       }
 
-      const days = getDaysBetween(start, end);
-      
-      if (!mergedResourceDays.has(resourceId)) {
-        mergedResourceDays.set(resourceId, new Set());
-      }
-      const set = mergedResourceDays.get(resourceId)!;
-      
-      const unavailableSet = unavailableDatesCache.get(resourceId) || new Set<string>();
+      const days = Array.from(dayKeys)
+        .sort()
+        .map((key) => parseDayKey(key)!)
+        .filter(Boolean);
 
       for (const d of days) {
-        const dayDate = startOfDayUTC(new Date(d));
-        if (isInProgress && dayDate < today) {
-          // Skip/ignore any incoming day in the past if in progress
-          continue;
-        }
-        if (unavailableSet.has(d)) {
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: 'RESOURCE_UNAVAILABLE',
-              message: `Resource is unavailable on ${d}`
-            }
-          });
-        }
-        set.add(d);
+        if (!maxDay || d > maxDay) maxDay = d;
       }
+
+      normalizedPlan.push({
+        resourceId: new mongoose.Types.ObjectId(resourceId),
+        days,
+      });
     }
 
     if (isInProgress) {
-      for (const rid of Object.keys(existingById)) {
-        const existing = existingById[rid];
-        const stillPresent = seenResource.has(rid);
-        const isUsed = startOfDayUTC(existing.startDate) <= today;
-        if (!stillPresent && isUsed) {
-          return res.status(400).json({ success: false, error: { code: 'DELETE_USED', message: 'A resource already in use cannot be removed, only shortened' } });
+      for (const [rid, previous] of existingPlanned.entries()) {
+        if (seenResource.has(rid)) continue;
+        for (const key of previous) {
+          const d = parseDayKey(key);
+          if (d && d < today) {
+            return res.status(400).json({ success: false, error: { code: 'PAST_LOCKED', message: 'Days before today cannot be removed while work is in progress' } });
+          }
         }
       }
     }
 
-    // 3. Convert mergedResourceDays to contiguous ranges
-    const normalizedPlan: { resourceId: mongoose.Types.ObjectId; startDate: Date; endDate: Date }[] = [];
-    for (const [rid, daySet] of mergedResourceDays.entries()) {
-      if (daySet.size === 0) continue;
-      const ranges = getContiguousRanges(Array.from(daySet));
-      for (const range of ranges) {
-        normalizedPlan.push({
-          resourceId: new mongoose.Types.ObjectId(rid),
-          startDate: parseUTCDate(range.startDate),
-          endDate: parseUTCDate(range.endDate),
-        });
-      }
-    }
-
-    if (normalizedPlan.length === 0) {
-      return res.status(400).json({ success: false, error: { code: 'EMPTY_PLAN', message: 'At least one resource day must be planned' } });
-    }
-
-    let maxEnd = normalizedPlan[0].endDate;
-    for (const entry of normalizedPlan) {
-      if (entry.endDate > maxEnd) maxEnd = entry.endDate;
-    }
-
-    // Check if the plan only consists of same-day allocations (each entry has startDate === endDate)
-    const isSameDayPlan = normalizedPlan.every(p => p.startDate.getTime() === p.endDate.getTime());
-
-    if (maxEnd <= bookingStart && !isSameDayPlan) {
-      maxEnd = new Date(bookingStart.getTime() + 24 * 60 * 60 * 1000);
-    }
+    const planWithDays = normalizedPlan.filter((p) => p.days.length > 0);
 
     const previousExecutionEnd = booking.scheduledExecutionEndDate
       ? startOfDayUTC(booking.scheduledExecutionEndDate)
       : null;
 
-    booking.resourcePlan = normalizedPlan as any;
-    const uniqueResourceIds = Array.from(new Set(normalizedPlan.map((p) => p.resourceId.toString())));
-    booking.assignedTeamMembers = uniqueResourceIds.map((id) => new mongoose.Types.ObjectId(id)) as any;
-    booking.scheduledExecutionEndDate = maxEnd;
+    let newExecutionEnd = maxDay || (previousExecutionEnd && previousExecutionEnd > startDate ? previousExecutionEnd : addDays(startDate, 1));
+    if (newExecutionEnd <= startDate) {
+      newExecutionEnd = addDays(startDate, 1);
+    }
+
+    booking.resourcePlan = planWithDays as any;
+    booking.assignedTeamMembers = planWithDays.map((p) => p.resourceId) as any;
+    booking.scheduledExecutionEndDate = newExecutionEnd;
 
     if (booking.scheduledBufferStartDate || booking.scheduledBufferEndDate) {
-      const shiftMs = previousExecutionEnd ? maxEnd.getTime() - previousExecutionEnd.getTime() : 0;
+      const shiftMs = previousExecutionEnd ? newExecutionEnd.getTime() - previousExecutionEnd.getTime() : 0;
       if (booking.scheduledBufferStartDate) {
         booking.scheduledBufferStartDate = new Date(startOfDayUTC(booking.scheduledBufferStartDate).getTime() + shiftMs);
       } else {
-        booking.scheduledBufferStartDate = maxEnd;
+        booking.scheduledBufferStartDate = newExecutionEnd;
       }
       if (booking.scheduledBufferEndDate) {
         booking.scheduledBufferEndDate = new Date(startOfDayUTC(booking.scheduledBufferEndDate).getTime() + shiftMs);
       }
-      if (booking.scheduledBufferStartDate < maxEnd) {
-        booking.scheduledBufferStartDate = maxEnd;
+      if (booking.scheduledBufferStartDate < newExecutionEnd) {
+        booking.scheduledBufferStartDate = newExecutionEnd;
       }
       if (booking.scheduledBufferEndDate && booking.scheduledBufferEndDate < booking.scheduledBufferStartDate) {
         booking.scheduledBufferEndDate = booking.scheduledBufferStartDate;
@@ -575,137 +391,12 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       status: booking.status,
       timestamp: new Date(),
       updatedBy: (req as any).user._id,
-      note: `Planning updated: ${normalizedPlan.length} resource(s), end ${maxEnd.toISOString().slice(0, 10)}`,
+      note: `Planning updated: ${planWithDays.length} resource(s), end ${formatDayKey(newExecutionEnd)}`,
     } as any);
 
-    // Final conflict recheck immediately before saving to prevent race conditions
-    const checkResourceIds = normalizedPlan.map(p => p.resourceId);
+    await booking.save({ validateModifiedOnly: true });
 
-    const runPlanningSave = async (dbSession: mongoose.ClientSession | null) => {
-      const activeOtherBookings = await Booking.find({
-        _id: { $ne: booking._id },
-        status: { $nin: ['completed', 'cancelled', 'refunded'] },
-        $or: [
-          { 'resourcePlan.resourceId': { $in: checkResourceIds } },
-          { assignedTeamMembers: { $in: checkResourceIds } },
-          { professional: { $in: checkResourceIds } },
-          { 'resourcePlan.resourceId': { $in: checkResourceIds.map(id => id.toString()) } },
-          { assignedTeamMembers: { $in: checkResourceIds.map(id => id.toString()) } },
-          { professional: { $in: checkResourceIds.map(id => id.toString()) } }
-        ]
-      })
-        .session(dbSession)
-        .select('resourcePlan scheduledStartDate scheduledExecutionEndDate scheduledBufferStartDate scheduledBufferEndDate');
-
-      for (const entry of normalizedPlan) {
-        const rid = entry.resourceId.toString();
-        const start = startOfDayUTC(entry.startDate);
-        const end = startOfDayUTC(entry.endDate);
-        const entryDays = getDaysBetween(start, end);
-
-        for (const b of activeOtherBookings) {
-          const hasResourcePlanForUser = Array.isArray(b.resourcePlan) && b.resourcePlan.some((p: any) => 
-            (p.resourceId?._id || p.resourceId)?.toString() === rid
-          );
-
-          if (hasResourcePlanForUser) {
-            const otherPlan = b.resourcePlan || [];
-            for (const p of otherPlan) {
-              if ((p.resourceId?._id || p.resourceId)?.toString() === rid) {
-                if (p.startDate && p.endDate) {
-                  const otherDays = getDaysBetween(new Date(p.startDate), new Date(p.endDate));
-                  const overlap = entryDays.some(day => otherDays.includes(day));
-                  if (overlap) {
-                    if (dbSession) {
-                      await dbSession.abortTransaction();
-                    }
-                    return res.status(409).json({
-                      success: false,
-                      error: {
-                        code: 'RESOURCE_CONFLICT_CONCURRENT',
-                        message: `Conflict detected: Resource was booked on overlapping days by a concurrent operation.`
-                      }
-                    });
-                  }
-                }
-              }
-            }
-          } else {
-            // Legacy fallback
-            if (b.scheduledStartDate && b.scheduledExecutionEndDate) {
-              const otherDays = getDaysBetween(new Date(b.scheduledStartDate), new Date(b.scheduledExecutionEndDate));
-              const overlap = entryDays.some(day => otherDays.includes(day));
-              if (overlap) {
-                if (dbSession) {
-                  await dbSession.abortTransaction();
-                }
-                return res.status(409).json({
-                  success: false,
-                  error: {
-                    code: 'RESOURCE_CONFLICT_CONCURRENT',
-                    message: `Conflict detected: Resource is assigned to another booking on overlapping days.`
-                  }
-                });
-              }
-            }
-            if (b.scheduledBufferStartDate && b.scheduledBufferEndDate) {
-              const otherDays = getDaysBetween(new Date(b.scheduledBufferStartDate), new Date(b.scheduledBufferEndDate));
-              const overlap = entryDays.some(day => otherDays.includes(day));
-              if (overlap) {
-                if (dbSession) {
-                  await dbSession.abortTransaction();
-                }
-                return res.status(409).json({
-                  success: false,
-                  error: {
-                    code: 'RESOURCE_CONFLICT_CONCURRENT',
-                    message: `Conflict detected: Resource is assigned to another booking buffer on overlapping days.`
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
-
-      await booking.save({ session: dbSession });
-      if (dbSession) {
-        await dbSession.commitTransaction();
-      }
-      return null;
-    };
-
-    let transactionErrorOccurred = false;
-    let session: mongoose.ClientSession | null = null;
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      const result = await runPlanningSave(session);
-      if (result) return result;
-    } catch (txError: any) {
-      if (txError.message && txError.message.includes('Transaction numbers are only allowed')) {
-        transactionErrorOccurred = true;
-      } else {
-        throw txError;
-      }
-    } finally {
-      if (session) {
-        try {
-          session.endSession();
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-    }
-
-    if (transactionErrorOccurred) {
-      console.warn("MongoDB environment does not support transactions/sessions. Falling back to non-transactional operation.");
-      const result = await runPlanningSave(null);
-      if (result) return result;
-    }
-
-    await booking.populate('assignedTeamMembers', 'name email');
-    const payload = await buildPlanningPayload(booking);
+    const payload = await buildPlanningPayload(booking, professional, project);
 
     return res.json({ success: true, data: payload });
   } catch (error: any) {

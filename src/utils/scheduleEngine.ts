@@ -916,6 +916,173 @@ const countAvailableResourcesForDay = (
   return count;
 };
 
+export type PerResourceBlockedDays = Map<string, Set<string>>;
+
+export const buildPerResourceBlockedDays = async (
+  project: any,
+  professional: any,
+  resourceIds: string[],
+  windowFrom: Date,
+  windowTo: Date,
+  timeZone: string,
+  excludeBookingId?: string,
+  customerBlocks?: CustomerBlocks
+): Promise<PerResourceBlockedDays> => {
+  const result: PerResourceBlockedDays = new Map();
+
+  const orderedIds: string[] = [];
+  const seen = new Set<string>();
+  for (const id of resourceIds) {
+    if (!id) continue;
+    const idStr = typeof id === 'string' ? id : String(id);
+    if (!mongoose.isValidObjectId(idStr)) continue;
+    if (seen.has(idStr)) continue;
+    seen.add(idStr);
+    orderedIds.push(idStr);
+  }
+
+  if (orderedIds.length === 0) {
+    return result;
+  }
+
+  const availability = resolveAvailability(
+    professional?.companyAvailability || professional?.availability
+  );
+
+  const { companyBlockedDates, companyBlockedRanges } = collectCompanyBlocks(
+    professional,
+    timeZone,
+    customerBlocks
+  );
+
+  const memberBlocksMap = await collectTeamMemberBlocks(
+    orderedIds,
+    companyBlockedDates,
+    companyBlockedRanges,
+    timeZone
+  );
+
+  for (const id of orderedIds) {
+    if (!memberBlocksMap.has(id)) {
+      memberBlocksMap.set(id, {
+        blockedDates: new Set<string>(companyBlockedDates),
+        blockedRanges: [...companyBlockedRanges],
+      });
+    }
+  }
+
+  const resourceObjectIds = toValidObjectIds(orderedIds);
+  const bookingFilter: any = {
+    status: { $nin: ['completed', 'cancelled', 'refunded'] },
+    scheduledStartDate: { $exists: true, $ne: null, $lte: windowTo },
+    $and: [
+      {
+        $or: [
+          { scheduledBufferEndDate: { $gte: windowFrom } },
+          { scheduledExecutionEndDate: { $gte: windowFrom } },
+        ],
+      },
+    ],
+    $or: [
+      { assignedTeamMembers: { $in: resourceObjectIds } },
+      { professional: { $in: resourceObjectIds } },
+    ],
+  };
+
+  if (excludeBookingId && mongoose.isValidObjectId(excludeBookingId)) {
+    bookingFilter._id = { $ne: new mongoose.Types.ObjectId(excludeBookingId) };
+  }
+
+  const bookings = await Booking.find(bookingFilter).select(
+    'scheduledStartDate scheduledExecutionEndDate scheduledBufferStartDate scheduledBufferEndDate assignedTeamMembers professional resourcePlan'
+  );
+
+  const resourceIdSet = new Set<string>(orderedIds);
+
+  bookings.forEach((booking: any) => {
+    const planByResource = new Map<string, Array<{ start: Date; end: Date }>>();
+    if (Array.isArray(booking.resourcePlan)) {
+      booking.resourcePlan.forEach((entry: any) => {
+        const rid = (entry?.resourceId?._id || entry?.resourceId)?.toString?.();
+        if (!rid || !resourceIdSet.has(rid)) return;
+        if (Array.isArray(entry?.days) && entry.days.length > 0) {
+          entry.days.forEach((day: any) => {
+            const d = new Date(day);
+            if (Number.isNaN(d.getTime())) return;
+            const list = planByResource.get(rid) || [];
+            list.push({ start: d, end: d });
+            planByResource.set(rid, list);
+          });
+        }
+      });
+    }
+
+    const affected = new Set<string>();
+    if (Array.isArray(booking.assignedTeamMembers) && booking.assignedTeamMembers.length > 0) {
+      booking.assignedTeamMembers.forEach((m: any) => {
+        const id = (m?._id || m)?.toString?.();
+        if (id && resourceIdSet.has(id)) affected.add(id);
+      });
+    }
+    const profId = (booking.professional?._id || booking.professional)?.toString?.();
+    if (profId && resourceIdSet.has(profId)) affected.add(profId);
+    planByResource.forEach((_v, rid) => affected.add(rid));
+
+    affected.forEach((rid) => {
+      const memberData = memberBlocksMap.get(rid);
+      if (!memberData) return;
+
+      const planned = planByResource.get(rid);
+      if (planned && planned.length > 0) {
+        planned.forEach((range) => {
+          memberData.blockedRanges.push({ start: range.start, end: range.end, reason: 'booking' });
+        });
+        return;
+      }
+
+      if (booking.scheduledStartDate && booking.scheduledExecutionEndDate) {
+        memberData.blockedRanges.push({
+          start: new Date(booking.scheduledStartDate),
+          end: new Date(booking.scheduledExecutionEndDate),
+          reason: 'booking',
+        });
+      }
+      if (booking.scheduledBufferStartDate && booking.scheduledBufferEndDate) {
+        memberData.blockedRanges.push({
+          start: new Date(booking.scheduledBufferStartDate),
+          end: new Date(booking.scheduledBufferEndDate),
+          reason: 'booking-buffer',
+        });
+      }
+    });
+  });
+
+  for (const id of orderedIds) {
+    result.set(id, new Set<string>());
+  }
+
+  const fromZoned = startOfDayZoned(toZonedTime(windowFrom, timeZone));
+  const toZoned = startOfDayZoned(toZonedTime(windowTo, timeZone));
+
+  for (const id of orderedIds) {
+    const memberData = memberBlocksMap.get(id);
+    const blockedSet = result.get(id)!;
+    if (!memberData) continue;
+    let cursor = fromZoned;
+    let iterations = 0;
+    const maxIterations = 366 * 2;
+    while (cursor <= toZoned && iterations < maxIterations) {
+      iterations++;
+      if (isMemberDayBlocked(memberData, availability, cursor, timeZone)) {
+        blockedSet.add(formatDateKey(cursor));
+      }
+      cursor = addDaysZoned(cursor, 1);
+    }
+  }
+
+  return result;
+};
+
 /**
  * Check if a time range overlaps with any blocked ranges for a member.
  */

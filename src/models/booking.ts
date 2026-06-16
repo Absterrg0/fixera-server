@@ -311,8 +311,7 @@ export interface IBooking extends Document {
   // Per-resource execution plan (professional-managed planning board)
   resourcePlan?: {
     resourceId: Types.ObjectId;
-    startDate: Date;
-    endDate: Date;
+    days: Date[];
   }[];
 
   customerBlocks?: {
@@ -923,15 +922,17 @@ const BookingSchema = new Schema({
         ref: 'User',
         required: true
       },
-      startDate: { type: Date, required: true },
-      endDate: { type: Date, required: true }
+      days: { type: [Date], default: [] }
     }],
     validate: {
-      validator: function (plan: Array<{ startDate?: Date; endDate?: Date }>) {
+      validator: function (plan: Array<{ days?: Date[] }>) {
         if (!Array.isArray(plan)) return true;
-        return plan.every((item) => !item?.startDate || !item?.endDate || item.endDate >= item.startDate);
+        return plan.every((item) =>
+          !item?.days ||
+          (Array.isArray(item.days) && item.days.every((d) => d instanceof Date && !Number.isNaN(d.getTime())))
+        );
       },
-      message: 'endDate must be on or after startDate',
+      message: 'resourcePlan days must be valid dates',
     },
   },
 

@@ -101,7 +101,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, msg: "Invalid id" });
     }
 
-    const { amount: rawAmount } = req.body || {};
+    const { amount: rawAmount, note: rawNote, resolutionNote: rawResolutionNote } = req.body || {};
     let customAmount: number | undefined;
     if (rawAmount !== undefined && rawAmount !== null && rawAmount !== "") {
       const parsedAmount = typeof rawAmount === "string" ? Number.parseFloat(rawAmount) : Number(rawAmount);
@@ -109,6 +109,19 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
         return res.status(400).json({ success: false, msg: "amount must be a number greater than 0" });
       }
       customAmount = parsedAmount;
+    }
+
+    const rawResolutionNoteValue = rawResolutionNote ?? rawNote;
+    let resolutionNote: string | undefined;
+    if (rawResolutionNoteValue !== undefined && rawResolutionNoteValue !== null && rawResolutionNoteValue !== "") {
+      if (typeof rawResolutionNoteValue !== "string") {
+        return res.status(400).json({ success: false, msg: "note must be a string" });
+      }
+      const trimmedNote = rawResolutionNoteValue.trim();
+      if (trimmedNote.length > 500) {
+        return res.status(400).json({ success: false, msg: "note cannot exceed 500 characters" });
+      }
+      if (trimmedNote) resolutionNote = trimmedNote;
     }
 
     const adminObjectId = new mongoose.Types.ObjectId(adminId);
@@ -142,6 +155,10 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
       return res.status(404).json({ success: false, msg: "Linked booking not found" });
     }
 
+    const resolvedReason = resolutionNote
+      ? `${cancellation.reason}\n\nAdmin resolution note: ${resolutionNote}`.slice(0, 500)
+      : cancellation.reason;
+
     let refundAmount = 0;
     let refundedAt: Date | undefined;
     const totalWithVat = booking.payment?.totalWithVat ?? 0;
@@ -162,7 +179,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
     if (hasPayment && booking.payment && refundableStatuses.includes(booking.payment.status)) {
       try {
         const result = await executeRefund(String(booking._id), {
-          reason: cancellation.reason,
+          reason: resolvedReason,
           ...(customAmount !== undefined ? { amount: customAmount } : {}),
         });
         refundAmount = result.amount;
@@ -190,7 +207,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
 
     freshBooking.cancellation = {
       cancelledBy: cancellation.requestedBy,
-      reason: cancellation.reason,
+      reason: resolvedReason,
       cancelledAt: new Date(),
       refundAmount: refundAmount || undefined,
     } as any;
@@ -199,7 +216,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
       await (freshBooking as any).updateStatus(
         "cancelled",
         adminId,
-        `Cancellation approved by admin: ${cancellation.reason}`
+        `Cancellation approved by admin: ${resolvedReason}`
       );
     } else {
       freshBooking.statusHistory = freshBooking.statusHistory || [];
@@ -207,7 +224,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
         status: freshBooking.status,
         timestamp: new Date(),
         updatedBy: adminId,
-        note: `Cancellation approved by admin: ${cancellation.reason}`,
+        note: `Cancellation approved by admin: ${resolvedReason}`,
       } as any);
     }
 
@@ -219,6 +236,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
     cancellation.resolvedBy = new mongoose.Types.ObjectId(adminId);
     cancellation.refundAmount = refundAmount || undefined;
     cancellation.refundedAt = refundedAt;
+    if (resolutionNote) cancellation.reason = resolvedReason;
     await cancellation.save();
 
     try {

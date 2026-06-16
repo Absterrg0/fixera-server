@@ -197,6 +197,7 @@ const buildExternalDisputeRows = async (statusFilter?: string): Promise<any[]> =
       resolveHref: '/admin/warranty-claims',
       bookingId: booking._id ? String(booking._id) : undefined,
       claimStatus: claim.status,
+      claimNumber: claim.claimNumber,
       bookingNumber: booking.bookingNumber || claim.claimNumber || '(warranty claim)',
       status: booking.status || 'completed',
       customer: claim.customer,
