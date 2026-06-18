@@ -414,7 +414,7 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
 
     const planWithDays = normalizedPlan.filter((p) => p.days.length > 0);
 
-    const startReal = booking.scheduledStartDate ? new Date(booking.scheduledStartDate) : startZoned;
+    const startReal = booking.scheduledStartDate ? toZonedDay(booking.scheduledStartDate, timeZone) : startZoned;
     const previousExecutionEnd = booking.scheduledExecutionEndDate
       ? startOfDayUTC(booking.scheduledExecutionEndDate)
       : null;
