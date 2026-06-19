@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import Booking, { BookingStatus } from '../../models/booking';
 import User from '../../models/user';
 import WarrantyClaim from '../../models/warrantyClaim';
-import CancellationRequest from '../../models/cancellationRequest';
+import CancellationRequest, { CANCELLATION_REASON_LABELS } from '../../models/cancellationRequest';
 import Conversation from '../../models/conversation';
 import { captureAndTransferPayment, executeRefund, RefundError } from '../Stripe/payment';
 import { stripe, STRIPE_CONFIG } from '../../services/stripe';
@@ -222,6 +222,9 @@ const buildExternalDisputeRows = async (statusFilter?: string): Promise<any[]> =
 
   const refundRows = refundRequests.map((request: any) => {
     const booking = request.booking || {};
+    const reasonCategoryLabel = request.reasonCategory
+      ? CANCELLATION_REASON_LABELS[request.reasonCategory as keyof typeof CANCELLATION_REASON_LABELS]
+      : undefined;
     return {
       _id: `refund:${request._id}`,
       source: 'refund',
@@ -236,7 +239,10 @@ const buildExternalDisputeRows = async (statusFilter?: string): Promise<any[]> =
       payment: booking.payment,
       actualStartDate: booking.actualStartDate,
       scheduledStartDate: booking.scheduledStartDate,
-      cancellation: booking.cancellation,
+      cancellation: {
+        ...(booking.cancellation || {}),
+        reason: reasonCategoryLabel ?? booking.cancellation?.reason,
+      },
       dispute: {
         raisedBy: request.requestedBy?._id || request.requestedBy,
         reason: 'Refund request (escalated)',

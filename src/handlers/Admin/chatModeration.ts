@@ -334,15 +334,13 @@ export const adminStartSupportChat = async (req: Request, res: Response) => {
       readBy: [{ userId: adminObjectId, readAt: new Date() }],
     });
 
-    const unreadField =
-      targetUser.role === "professional" ? "professionalUnreadCount" : "customerUnreadCount";
     await Conversation.findByIdAndUpdate(conversation._id, {
       $set: {
         lastMessageAt: new Date(),
         lastMessagePreview: initialMessage.trim().slice(0, 200),
         lastMessageSenderId: adminObjectId,
       },
-      $inc: { [unreadField]: 1 },
+      $inc: { customerUnreadCount: 1 },
     });
 
     return res.status(201).json({
@@ -383,8 +381,6 @@ export const adminReplySupportChat = async (req: Request, res: Response) => {
     }
 
     const adminObjectId = new mongoose.Types.ObjectId(adminId);
-    const targetUser = await User.findById(conversation.supportTargetUserId).select("role").lean();
-    const unreadField = targetUser?.role === "professional" ? "professionalUnreadCount" : "customerUnreadCount";
 
     const claimed = await Conversation.findOneAndUpdate(
       { _id: conversation._id, type: "support", status: "active", supportAdminId: adminObjectId },
@@ -394,7 +390,7 @@ export const adminReplySupportChat = async (req: Request, res: Response) => {
           lastMessagePreview: text.trim().slice(0, 200),
           lastMessageSenderId: adminObjectId,
         },
-        $inc: { [unreadField]: 1 },
+        $inc: { customerUnreadCount: 1 },
       }
     );
     if (!claimed) {

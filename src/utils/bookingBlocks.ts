@@ -50,7 +50,7 @@ export const buildBookingBlockedRanges = async (
 
   const bookings = await Booking.find(bookingFilter)
     .select(
-      "scheduledStartDate scheduledExecutionEndDate scheduledBufferStartDate scheduledBufferEndDate scheduledBufferUnit executionEndDate bufferStartDate scheduledEndDate location bookingNumber customer"
+      "scheduledStartDate scheduledExecutionEndDate scheduledBufferStartDate scheduledBufferEndDate scheduledBufferUnit executionEndDate bufferStartDate scheduledEndDate location bookingNumber customer resourcePlan"
     )
     .populate("customer", "name");
 
@@ -65,6 +65,59 @@ export const buildBookingBlockedRanges = async (
       booking.scheduledBufferStartDate || (booking as any).bufferStartDate;
     const scheduledBufferEndDate =
       booking.scheduledBufferEndDate || (booking as any).scheduledEndDate;
+
+    const plan: any[] = Array.isArray((booking as any).resourcePlan) ? (booking as any).resourcePlan : [];
+    const hasPlan = plan.some((e: any) => Array.isArray(e?.days) && e.days.length > 0);
+
+    if (hasPlan) {
+      const entry = plan.find(
+        (e: any) => ((e?.resourceId?._id || e?.resourceId)?.toString?.()) === userIdString
+      );
+      const plannedDays: any[] = entry && Array.isArray(entry.days) ? entry.days : [];
+
+      if (plannedDays.length === 0) {
+        return;
+      }
+
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      for (const day of plannedDays) {
+        const dayDate = new Date(day);
+        if (Number.isNaN(dayDate.getTime())) continue;
+        const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
+        const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+        const startISO = toISOString(dayStart);
+        const endISO = toISOString(dayEnd);
+        if (startISO && endISO) {
+          ranges.push({
+            startDate: startISO,
+            endDate: endISO,
+            reason: "booking",
+            bookingId: String(booking._id),
+            bookingNumber: booking.bookingNumber,
+            customerName,
+            location: booking.location,
+          });
+        }
+      }
+
+      if (scheduledBufferStartDate && scheduledBufferEndDate && scheduledExecutionEndDate) {
+        const bufferStartISO = toISOString(scheduledBufferStartDate);
+        const bufferEndISO = toISOString(scheduledBufferEndDate);
+        if (bufferStartISO && bufferEndISO) {
+          ranges.push({
+            startDate: bufferStartISO,
+            endDate: bufferEndISO,
+            reason: "booking-buffer",
+            bookingId: String(booking._id),
+            bookingNumber: booking.bookingNumber,
+            customerName,
+            location: booking.location,
+          });
+        }
+      }
+
+      return;
+    }
 
     if (booking.scheduledStartDate && scheduledExecutionEndDate) {
       const startDateISO = toISOString(booking.scheduledStartDate);

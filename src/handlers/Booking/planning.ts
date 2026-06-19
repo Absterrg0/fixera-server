@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import Booking, { BookingStatus } from '../../models/booking';
 import Project from '../../models/project';
 import User from '../../models/user';
-import { buildPerResourceBlockedDays } from '../../utils/scheduleEngine';
+import { buildPerResourceBlockedDays, toZonedTime, fromZonedTime, startOfDayZoned } from '../../utils/scheduleEngine';
 
 const PLANNING_ACTIVE_STATUSES: BookingStatus[] = ['booked', 'rescheduling_requested', 'in_progress', 'professional_completed'];
 
@@ -23,20 +23,34 @@ const formatDayKey = (value: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const parseDayKey = (value: unknown): Date | null => {
-  if (typeof value !== 'string') return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const d = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) return null;
-  const [y, m, day] = value.split('-').map(Number);
-  if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== m || d.getUTCDate() !== day) return null;
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const addDaysZoned = (value: Date, days: number): Date => {
+  const d = new Date(value);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 };
 
-const addDays = (value: Date, days: number): Date => {
-  const d = startOfDayUTC(value);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d;
+const toZonedDay = (value: Date, timeZone: string): Date => startOfDayZoned(toZonedTime(value, timeZone));
+
+const zonedDayToReal = (zonedDay: Date, timeZone: string): Date => fromZonedTime(zonedDay, timeZone);
+
+const keyToZonedDay = (key: string): Date => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+};
+
+const enumerateDayKeys = (fromKey: string, toKey: string): string[] => {
+  const keys: string[] = [];
+  let cursor = keyToZonedDay(fromKey);
+  const end = keyToZonedDay(toKey);
+  let guard = 0;
+  while (cursor <= end && guard < 1000) {
+    guard++;
+    keys.push(formatDayKey(cursor));
+    cursor = addDaysZoned(cursor, 1);
+  }
+  return keys;
 };
 
 const resolveProfessionalId = async (booking: any): Promise<string | undefined> => {
@@ -125,30 +139,40 @@ const getPlannedDayKeys = (booking: any): Map<string, Set<string>> => {
   return map;
 };
 
-const buildWindow = (booking: any, project: any) => {
-  const today = startOfDayUTC(new Date());
-  const rawStart = booking.scheduledStartDate ? startOfDayUTC(booking.scheduledStartDate) : null;
+const buildWindow = (booking: any, project: any, timeZone: string) => {
+  const todayZoned = toZonedDay(new Date(), timeZone);
+  const rawStartZoned = booking.scheduledStartDate ? toZonedDay(booking.scheduledStartDate, timeZone) : null;
   const isInProgress = booking.status === 'in_progress' || booking.status === 'professional_completed';
 
-  const startDate = rawStart || today;
-  const windowFrom = isInProgress && today > startDate ? startDate : startDate;
+  const startZoned = rawStartZoned || todayZoned;
+  const windowFromZoned = isInProgress && todayZoned > startZoned ? todayZoned : startZoned;
 
   const executionDays = resolveExecutionDays(project, booking);
-  const plannedEnd = booking.scheduledExecutionEndDate ? startOfDayUTC(booking.scheduledExecutionEndDate) : null;
-  const execEnd = addDays(startDate, executionDays);
-  let windowTo = execEnd;
-  if (plannedEnd && plannedEnd > windowTo) windowTo = plannedEnd;
-  if (windowTo < startDate) windowTo = startDate;
-  windowTo = addDays(windowTo, WINDOW_MARGIN_DAYS);
+  const plannedEndZoned = booking.scheduledExecutionEndDate ? toZonedDay(booking.scheduledExecutionEndDate, timeZone) : null;
+  let windowToZoned = addDaysZoned(startZoned, executionDays);
+  if (plannedEndZoned && plannedEndZoned > windowToZoned) windowToZoned = plannedEndZoned;
+  if (windowToZoned < startZoned) windowToZoned = startZoned;
+  windowToZoned = addDaysZoned(windowToZoned, WINDOW_MARGIN_DAYS);
 
-  return { startDate, windowFrom, windowTo, isInProgress };
+  return {
+    startZoned,
+    windowFromZoned,
+    windowToZoned,
+    todayZoned,
+    isInProgress,
+    executionDays,
+    plannedEndZoned,
+    windowFromReal: zonedDayToReal(windowFromZoned, timeZone),
+    windowToReal: zonedDayToReal(windowToZoned, timeZone),
+  };
 };
 
 const buildPlanningPayload = async (booking: any, professional: any, project: any) => {
   const candidateResources = await resolveCandidateResources(booking);
   const resourceIds = candidateResources.map((r) => r._id);
-  const { startDate, windowFrom, windowTo, isInProgress } = buildWindow(booking, project);
   const timeZone = resolveTimeZone(professional);
+  const { startZoned, windowFromZoned, windowToZoned, todayZoned, isInProgress, executionDays, plannedEndZoned, windowFromReal, windowToReal } =
+    buildWindow(booking, project, timeZone);
 
   let blockedByResource: Map<string, Set<string>> = new Map();
   if (resourceIds.length > 0) {
@@ -156,8 +180,8 @@ const buildPlanningPayload = async (booking: any, professional: any, project: an
       project,
       professional,
       resourceIds,
-      windowFrom,
-      windowTo,
+      windowFromReal,
+      windowToReal,
       timeZone,
       booking._id.toString(),
       booking.customerBlocks
@@ -165,6 +189,34 @@ const buildPlanningPayload = async (booking: any, professional: any, project: an
   }
 
   const plannedByResource = getPlannedDayKeys(booking);
+
+  const hasAnyPlan = Array.isArray(booking.resourcePlan)
+    && booking.resourcePlan.some((e: any) => Array.isArray(e?.days) && e.days.length > 0);
+
+  if (!hasAnyPlan) {
+    const assignedIds = new Set<string>(
+      (Array.isArray(booking.assignedTeamMembers) ? booking.assignedTeamMembers : [])
+        .map((m: any) => (m?._id || m)?.toString?.())
+        .filter(Boolean)
+    );
+    const seedResourceIds = assignedIds.size > 0
+      ? resourceIds.filter((id) => assignedIds.has(id))
+      : resourceIds.slice(0, 1);
+    const seedFromKey = formatDayKey(startZoned);
+    const seedToZoned = plannedEndZoned && plannedEndZoned > startZoned
+      ? plannedEndZoned
+      : addDaysZoned(startZoned, Math.max(0, executionDays - 1));
+    const seedToKey = formatDayKey(seedToZoned);
+    const candidateKeys = enumerateDayKeys(seedFromKey, seedToKey);
+    for (const id of seedResourceIds) {
+      const blocked = blockedByResource.get(id) || new Set<string>();
+      const set = plannedByResource.get(id) || new Set<string>();
+      for (const key of candidateKeys) {
+        if (!blocked.has(key)) set.add(key);
+      }
+      plannedByResource.set(id, set);
+    }
+  }
 
   const customer = booking.customer && (booking.customer.name || booking.customer.email)
     ? booking.customer
@@ -178,10 +230,10 @@ const buildPlanningPayload = async (booking: any, professional: any, project: an
     bookingNumber: booking.bookingNumber || '',
     customerName,
     status: booking.status,
-    startDate: formatDayKey(startDate),
-    windowFrom: formatDayKey(windowFrom),
-    windowTo: formatDayKey(windowTo),
-    today: formatDayKey(startOfDayUTC(new Date())),
+    startDate: formatDayKey(startZoned),
+    windowFrom: formatDayKey(windowFromZoned),
+    windowTo: formatDayKey(windowToZoned),
+    today: formatDayKey(todayZoned),
     isInProgress,
     resources: candidateResources.map((r) => ({
       _id: r._id,
@@ -258,17 +310,21 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'NO_RESOURCES', message: 'This booking has no resources available to plan' } });
     }
 
-    const { startDate, windowFrom, windowTo, isInProgress } = buildWindow(booking, project);
-    const today = startOfDayUTC(new Date());
     const timeZone = resolveTimeZone(professional);
+    const { startZoned, windowFromZoned, windowToZoned, todayZoned, isInProgress, windowFromReal, windowToReal } =
+      buildWindow(booking, project, timeZone);
+    const startKey = formatDayKey(startZoned);
+    const windowFromKey = formatDayKey(windowFromZoned);
+    const windowToKey = formatDayKey(windowToZoned);
+    const todayKey = formatDayKey(todayZoned);
 
     const resourceIds = candidateResources.map((r) => r._id);
     const blockedByResource = await buildPerResourceBlockedDays(
       project,
       professional,
       resourceIds,
-      windowFrom,
-      windowTo,
+      windowFromReal,
+      windowToReal,
       timeZone,
       booking._id.toString(),
       booking.customerBlocks
@@ -278,7 +334,8 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
 
     const normalizedPlan: { resourceId: mongoose.Types.ObjectId; days: Date[] }[] = [];
     const seenResource = new Set<string>();
-    let maxDay: Date | null = null;
+    const startDatePlannedResources = new Set<string>();
+    let maxKey: string | null = null;
 
     for (const item of incomingPlan) {
       const resourceId = item?.resourceId != null ? String(item.resourceId) : '';
@@ -299,12 +356,11 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       const dayKeys = new Set<string>();
 
       for (const raw of rawDays) {
-        const parsed = parseDayKey(raw);
-        if (!parsed) {
+        if (typeof raw !== 'string' || !DAY_KEY_RE.test(raw)) {
           return res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'Each planned day must be a valid YYYY-MM-DD date' } });
         }
-        const key = formatDayKey(parsed);
-        if (parsed < windowFrom || parsed > windowTo) {
+        const key = raw;
+        if (key < windowFromKey || key > windowToKey) {
           return res.status(400).json({ success: false, error: { code: 'OUT_OF_WINDOW', message: 'A planned day is outside the allowed window' } });
         }
         if (blocked.has(key)) {
@@ -316,8 +372,7 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       if (isInProgress) {
         const allKeys = new Set<string>([...dayKeys, ...previous]);
         for (const key of allKeys) {
-          const d = parseDayKey(key);
-          if (!d || d >= today) continue;
+          if (key >= todayKey) continue;
           const wasPlanned = previous.has(key);
           const isPlanned = dayKeys.has(key);
           if (wasPlanned !== isPlanned) {
@@ -326,14 +381,14 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
         }
       }
 
+      if (dayKeys.has(startKey)) startDatePlannedResources.add(resourceId);
+      for (const key of dayKeys) {
+        if (!maxKey || key > maxKey) maxKey = key;
+      }
+
       const days = Array.from(dayKeys)
         .sort()
-        .map((key) => parseDayKey(key)!)
-        .filter(Boolean);
-
-      for (const d of days) {
-        if (!maxDay || d > maxDay) maxDay = d;
-      }
+        .map((key) => keyToZonedDay(key));
 
       normalizedPlan.push({
         resourceId: new mongoose.Types.ObjectId(resourceId),
@@ -345,23 +400,30 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
       for (const [rid, previous] of existingPlanned.entries()) {
         if (seenResource.has(rid)) continue;
         for (const key of previous) {
-          const d = parseDayKey(key);
-          if (d && d < today) {
+          if (key < todayKey) {
             return res.status(400).json({ success: false, error: { code: 'PAST_LOCKED', message: 'Days before today cannot be removed while work is in progress' } });
           }
         }
       }
     }
 
+    const startDateEditable = startKey >= windowFromKey && startKey <= windowToKey;
+    if (startDateEditable && startDatePlannedResources.size === 0) {
+      return res.status(400).json({ success: false, error: { code: 'START_DATE_REQUIRED', message: 'At least one resource must stay planned on the start date.' } });
+    }
+
     const planWithDays = normalizedPlan.filter((p) => p.days.length > 0);
 
+    const startReal = booking.scheduledStartDate ? toZonedDay(booking.scheduledStartDate, timeZone) : startZoned;
     const previousExecutionEnd = booking.scheduledExecutionEndDate
       ? startOfDayUTC(booking.scheduledExecutionEndDate)
       : null;
 
-    let newExecutionEnd = maxDay || (previousExecutionEnd && previousExecutionEnd > startDate ? previousExecutionEnd : addDays(startDate, 1));
-    if (newExecutionEnd <= startDate) {
-      newExecutionEnd = addDays(startDate, 1);
+    let newExecutionEnd = maxKey
+      ? keyToZonedDay(maxKey)
+      : (previousExecutionEnd && previousExecutionEnd > startReal ? previousExecutionEnd : addDaysZoned(startZoned, 1));
+    if (newExecutionEnd <= startReal) {
+      newExecutionEnd = addDaysZoned(startZoned, 1);
     }
 
     booking.resourcePlan = planWithDays as any;
