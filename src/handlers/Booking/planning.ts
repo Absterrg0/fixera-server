@@ -430,23 +430,9 @@ export const updateBookingPlanning = async (req: Request, res: Response) => {
     booking.assignedTeamMembers = planWithDays.map((p) => p.resourceId) as any;
     booking.scheduledExecutionEndDate = newExecutionEnd;
 
-    if (booking.scheduledBufferStartDate || booking.scheduledBufferEndDate) {
-      const shiftMs = previousExecutionEnd ? newExecutionEnd.getTime() - previousExecutionEnd.getTime() : 0;
-      if (booking.scheduledBufferStartDate) {
-        booking.scheduledBufferStartDate = new Date(startOfDayUTC(booking.scheduledBufferStartDate).getTime() + shiftMs);
-      } else {
-        booking.scheduledBufferStartDate = newExecutionEnd;
-      }
-      if (booking.scheduledBufferEndDate) {
-        booking.scheduledBufferEndDate = new Date(startOfDayUTC(booking.scheduledBufferEndDate).getTime() + shiftMs);
-      }
-      if (booking.scheduledBufferStartDate < newExecutionEnd) {
-        booking.scheduledBufferStartDate = newExecutionEnd;
-      }
-      if (booking.scheduledBufferEndDate && booking.scheduledBufferEndDate < booking.scheduledBufferStartDate) {
-        booking.scheduledBufferEndDate = booking.scheduledBufferStartDate;
-      }
-    }
+    booking.scheduledBufferStartDate = undefined;
+    booking.scheduledBufferEndDate = undefined;
+    booking.scheduledBufferUnit = undefined;
 
     booking.statusHistory = booking.statusHistory || [];
     booking.statusHistory.push({

@@ -100,22 +100,6 @@ export const buildBookingBlockedRanges = async (
         }
       }
 
-      if (scheduledBufferStartDate && scheduledBufferEndDate && scheduledExecutionEndDate) {
-        const bufferStartISO = toISOString(scheduledBufferStartDate);
-        const bufferEndISO = toISOString(scheduledBufferEndDate);
-        if (bufferStartISO && bufferEndISO) {
-          ranges.push({
-            startDate: bufferStartISO,
-            endDate: bufferEndISO,
-            reason: "booking-buffer",
-            bookingId: String(booking._id),
-            bookingNumber: booking.bookingNumber,
-            customerName,
-            location: booking.location,
-          });
-        }
-      }
-
       return;
     }
 
