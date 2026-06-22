@@ -7,7 +7,7 @@ import { buildPerResourceBlockedDays, toZonedTime, fromZonedTime, startOfDayZone
 
 const PLANNING_ACTIVE_STATUSES: BookingStatus[] = ['booked', 'rescheduling_requested', 'in_progress', 'professional_completed'];
 
-const WINDOW_MARGIN_DAYS = 14;
+const WINDOW_MARGIN_DAYS = 60;
 
 const startOfDayUTC = (value: Date): Date => {
   const d = new Date(value);
