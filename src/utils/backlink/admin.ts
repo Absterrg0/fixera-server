@@ -9,6 +9,7 @@ import {
   notifyRevoked,
 } from './notifications';
 import { rewardPointsForRole } from './rewards';
+import { BacklinkError } from './errors';
 import { scheduleVerification } from './verifySubmission';
 
 const LOG_PREFIX = '[backlink]';
@@ -25,21 +26,21 @@ export async function adminApproveSubmission(
 
   if (!preClaim) {
     const existing = await BacklinkSubmission.findById(submissionId).select('status');
-    if (!existing) throw new Error('Submission not found');
+    if (!existing) throw new BacklinkError('Submission not found', 404);
     if (existing.status === 'verified') {
-      throw new Error('Submission is already verified');
+      throw new BacklinkError('Submission is already verified', 400);
     }
     if (existing.status === 'revoked') {
-      throw new Error('Cannot approve a revoked submission');
+      throw new BacklinkError('Cannot approve a revoked submission', 400);
     }
     if (existing.status === 'verifying') {
-      throw new Error('Submission is being verified — wait or reprocess');
+      throw new BacklinkError('Submission is being verified — wait for crawl to finish', 409);
     }
-    throw new Error('Submission not found or already processed');
+    throw new BacklinkError('Submission not found or already processed', 400);
   }
 
   const user = await User.findById(preClaim.userId).select('role');
-  if (!user) throw new Error('Submitting user not found');
+  if (!user) throw new BacklinkError('Submitting user not found', 404);
 
   const rewardPoints = rewardPointsForRole(config, user.role);
 
@@ -60,7 +61,7 @@ export async function adminApproveSubmission(
     { new: true },
   );
 
-  if (!submission) throw new Error('Submission not found or already processed');
+  if (!submission) throw new BacklinkError('Submission not found or already processed', 400);
 
   if (rewardPoints > 0 && !submission.pointTransactionId) {
     try {
@@ -122,15 +123,8 @@ export async function adminRejectSubmission(
   adminId: mongoose.Types.ObjectId,
   reason: string,
 ): Promise<IBacklinkSubmission> {
-  const submission = await BacklinkSubmission.findById(submissionId);
-  if (!submission) throw new Error('Submission not found');
-
-  if (submission.status === 'verified') {
-    throw new Error('Use revoke to retract a verified submission');
-  }
-
-  const updated = await BacklinkSubmission.findByIdAndUpdate(
-    submissionId,
+  const updated = await BacklinkSubmission.findOneAndUpdate(
+    { _id: submissionId, status: { $nin: ['verified', 'verifying'] } },
     {
       $set: {
         status: 'rejected',
@@ -143,9 +137,20 @@ export async function adminRejectSubmission(
     { new: true },
   );
 
-  notifyAdminRejected(submission.userId, submission._id, submission.domain, reason);
+  if (updated) {
+    notifyAdminRejected(updated.userId, updated._id, updated.domain, reason);
+    return updated;
+  }
 
-  return updated!;
+  const existing = await BacklinkSubmission.findById(submissionId).select('status');
+  if (!existing) throw new BacklinkError('Submission not found', 404);
+  if (existing.status === 'verified') {
+    throw new BacklinkError('Use revoke to retract a verified submission', 400);
+  }
+  if (existing.status === 'verifying') {
+    throw new BacklinkError('Submission is being verified — wait for crawl to finish', 409);
+  }
+  throw new BacklinkError('Submission not found or already processed', 400);
 }
 
 export async function adminRevokeSubmission(
@@ -154,10 +159,10 @@ export async function adminRevokeSubmission(
   reason: string,
 ): Promise<IBacklinkSubmission> {
   const submission = await BacklinkSubmission.findById(submissionId);
-  if (!submission) throw new Error('Submission not found');
+  if (!submission) throw new BacklinkError('Submission not found', 404);
 
   if (submission.status !== 'verified') {
-    throw new Error('Only verified submissions can be revoked');
+    throw new BacklinkError('Only verified submissions can be revoked', 400);
   }
 
   const pointsToClawBack = submission.rewardPoints ?? 0;
@@ -229,13 +234,16 @@ export async function adminReprocessSubmission(
   submissionId: mongoose.Types.ObjectId,
 ): Promise<void> {
   const submission = await BacklinkSubmission.findById(submissionId);
-  if (!submission) throw new Error('Submission not found');
+  if (!submission) throw new BacklinkError('Submission not found', 404);
 
   if (submission.status === 'verified') {
-    throw new Error('Submission is already verified');
+    throw new BacklinkError('Submission is already verified', 400);
   }
   if (submission.status === 'revoked') {
-    throw new Error('Cannot reprocess a revoked submission');
+    throw new BacklinkError('Cannot reprocess a revoked submission', 400);
+  }
+  if (submission.status === 'verifying') {
+    throw new BacklinkError('Submission is being verified — wait for crawl to finish', 409);
   }
 
   await BacklinkSubmission.findByIdAndUpdate(submissionId, {
