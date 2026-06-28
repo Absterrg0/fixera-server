@@ -103,7 +103,7 @@ export async function sendPushToUser(
   userId: string,
   payload: PushPayload,
 ): Promise<void> {
-  const user = await User.findById(userId).select('fcmTokens notificationPreferences');
+  const user = await User.findById(userId).select('+fcmTokens notificationPreferences');
   if (!user?.fcmTokens?.length) return;
 
   if (isPushDisabled(user.notificationPreferences, payload.type)) return;
@@ -121,7 +121,7 @@ export async function sendPushToUsers(
   if (!userIds.length) return;
 
   const users = await User.find({ _id: { $in: userIds } }).select(
-    'fcmTokens notificationPreferences',
+    '+fcmTokens notificationPreferences',
   );
 
   const allTokensWithOwner: { token: string; userId: string }[] = [];

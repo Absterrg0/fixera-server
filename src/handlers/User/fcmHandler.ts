@@ -41,13 +41,38 @@ export const registerFcmToken = async (req: Request, res: Response): Promise<voi
       { $pull: { fcmTokens: cleanToken } },
     );
 
-    // Atomic dedupe + append + recency cap without read-modify-write.
-    await User.findByIdAndUpdate(userId, {
-      $pull: { fcmTokens: cleanToken },
-    });
-    await User.findByIdAndUpdate(userId, {
-      $push: { fcmTokens: { $each: [cleanToken], $slice: -MAX_TOKENS_PER_USER } },
-    });
+    // Single atomic dedupe + append + recency cap (no read-modify-write).
+    await User.findByIdAndUpdate(
+      userId,
+      [
+        {
+          $set: {
+            fcmTokens: {
+              $let: {
+                vars: { existing: { $ifNull: ['$fcmTokens', []] } },
+                in: {
+                  $slice: [
+                    {
+                      $concatArrays: [
+                        {
+                          $filter: {
+                            input: '$$existing',
+                            as: 't',
+                            cond: { $ne: ['$$t', cleanToken] },
+                          },
+                        },
+                        [cleanToken],
+                      ],
+                    },
+                    -MAX_TOKENS_PER_USER,
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ],
+    );
 
     res.status(200).json({ success: true, msg: 'FCM token registered' });
   } catch (err) {
