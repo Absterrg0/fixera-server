@@ -14,8 +14,6 @@ import { sendBookingCancelledEmail, sendCancellationRequestRaisedEmail } from ".
 import { getProfessionalDisplayName } from "../../utils/displayName";
 import CancellationRequest, { ACTIVE_CANCELLATION_STATUSES, CANCELLATION_REASON_CATEGORIES, CANCELLATION_REASON_LABELS, CancellationReasonCategory } from "../../models/cancellationRequest";
 import { addBusinessDays, REFUND_RESPONSE_BUSINESS_DAYS } from "../../utils/businessDays";
-import { sendPushToUser } from "../../utils/fcmService";
-import { IUser } from "../../models/user";
 
 const presignMaybeS3Url = async (url?: string | null) => {
   if (!url) return url;
@@ -249,21 +247,6 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
         return res.status(400).json({
           success: false,
           msg: "Project is not available for booking"
-        });
-      }
-
-      if (!project.professionalId) {
-        return res.status(400).json({
-          success: false,
-          msg: "Project has no assigned professional",
-        });
-      }
-
-      const projectProfessional = await User.findById(project.professionalId).select('_id role');
-      if (!projectProfessional || projectProfessional.role !== 'professional') {
-        return res.status(400).json({
-          success: false,
-          msg: "Project professional is invalid or no longer available",
         });
       }
 
@@ -629,7 +612,7 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
       }
     }
 
-    let booking: IBooking | null = null;
+    let booking: any = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         booking = await Booking.create(bookingData);
@@ -641,41 +624,20 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
         throw err;
       }
     }
-    // Invariant: the loop above always throws on failure, so booking is set here.
-    if (!booking) throw new Error('Booking creation failed unexpectedly');
 
-    // populate<T>() returns MergeType<this, T> — TypeScript merges the specified
-    // field types into the document shape, giving us full type-safety with no casts.
-    const populated = await booking.populate<{
-      customer: Pick<IUser, '_id' | 'name' | 'email' | 'phone'>;
-      professional: Pick<IUser, '_id' | 'name' | 'email'>;
-    }>([
+    await booking.populate([
       { path: 'customer', select: 'name email phone' },
       { path: 'professional', select: 'name email businessInfo' },
       { path: 'project', select: 'title description pricing' }
     ]);
 
-    // Notify the professional (non-blocking)
-    const notifyProfessionalId = populated.professional?._id?.toString();
-    if (notifyProfessionalId) {
-      void sendPushToUser(notifyProfessionalId, {
-        title: '📋 New Booking Request',
-        body: `${populated.customer.name} has sent you a new booking request`,
-        type: 'booking_updates',
-        clickUrl: `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/dashboard`,
-        data: { bookingId: populated._id.toString() },
-      }).catch((err: unknown) => {
-        console.warn('FCM notify professional failed (non-critical):', err);
-      });
-    }
-
     return res.status(201).json({
       success: true,
       msg:
-        populated.status === "quote_accepted"
+        booking.status === "quote_accepted"
           ? "Booking created. Proceed to payment."
           : "Booking request created successfully",
-      booking: populated
+      booking
     });
 
   } catch (error: any) {
