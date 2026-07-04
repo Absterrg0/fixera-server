@@ -14,6 +14,14 @@ export interface VatDecision {
   ruleGroup?: string;
 }
 
+export interface VatRateOption {
+  rate: number;
+  country: string;
+  label: string;
+  reverseCharge: boolean;
+  source: "standard" | "reduced" | "b2b_exempt";
+}
+
 const COUNTRY_ALIASES: Record<string, string> = {
   BELGIUM: "BE",
   NETHERLANDS: "NL",
@@ -44,7 +52,9 @@ const STANDARD_RATES: Record<string, number> = {
   SK: 23, HU: 27, SI: 22, HR: 25, GR: 24, CY: 19, BG: 20, TR: 20,
 };
 
-const B2B_SAME_AS_B2C = new Set(["BE", "CH", "LI", "NO", "GR"]);
+export const B2B_SAME_AS_B2C_COUNTRIES = new Set(["BE", "CH", "LI", "NO", "GR"]);
+export const B2B_VAT_EXEMPTION_NOTE =
+  'Intra-Community supply, VAT exempt under Article 39bis of the VAT Directive';
 
 export const normalizeVatCountry = (country?: string | null): string => {
   const raw = String(country || "BE").trim();
@@ -58,6 +68,9 @@ export const getStandardVatRate = (country?: string | null): number => {
   const normalized = normalizeVatCountry(country);
   return STANDARD_RATES[normalized] ?? 21;
 };
+
+export const isB2BSameAsB2CCountry = (country?: string | null): boolean =>
+  B2B_SAME_AS_B2C_COUNTRIES.has(normalizeVatCountry(country));
 
 const coerceComparable = (value: unknown): string | number | boolean => {
   if (typeof value === "boolean" || typeof value === "number") return value;
@@ -105,14 +118,74 @@ export const evaluateVatRule = (rule: IVatLogicRule, answers: Record<string, unk
 
 export const applyB2BInvoiceRule = (decision: VatDecision, customerType?: string): VatDecision => {
   if (customerType !== "business") return decision;
-  if (B2B_SAME_AS_B2C.has(decision.country)) return decision;
+  if (isB2BSameAsB2CCountry(decision.country)) return decision;
 
   return {
     ...decision,
     appliedRate: 0,
     reverseCharge: true,
-    explanation: 'Intra-Community supply, VAT exempt under Article 39bis of the VAT Directive',
+    explanation: B2B_VAT_EXEMPTION_NOTE,
   };
+};
+
+const pushUniqueRate = (options: VatRateOption[], option: VatRateOption) => {
+  if (!options.some((existing) => existing.rate === option.rate && existing.reverseCharge === option.reverseCharge)) {
+    options.push(option);
+  }
+};
+
+export const getVatRateOptionsFromConfig = async (params: {
+  serviceConfigurationId?: string;
+  category?: string;
+  service?: string;
+  areaOfWork?: string;
+  country?: string;
+  customerType?: string;
+  answers?: Record<string, unknown>;
+}): Promise<VatRateOption[]> => {
+  const country = normalizeVatCountry(params.country);
+  const decision = await resolveVatDecisionFromConfig({
+    serviceConfigurationId: params.serviceConfigurationId,
+    category: params.category,
+    service: params.service,
+    areaOfWork: params.areaOfWork,
+    country,
+    answers: params.answers,
+    customerType: params.customerType,
+  });
+
+  if (params.customerType === "business" && !isB2BSameAsB2CCountry(country)) {
+    return [{
+      rate: 0,
+      country,
+      label: `0% VAT - ${B2B_VAT_EXEMPTION_NOTE}`,
+      reverseCharge: true,
+      source: "b2b_exempt",
+    }];
+  }
+
+  const options: VatRateOption[] = [];
+  pushUniqueRate(options, {
+    rate: decision.standardRate,
+    country,
+    label: `${decision.standardRate}% standard VAT`,
+    reverseCharge: false,
+    source: "standard",
+  });
+
+  if (decision.action === "reduced_rate" && Number.isFinite(decision.reducedRate)) {
+    pushUniqueRate(options, {
+      rate: decision.reducedRate!,
+      country,
+      label: decision.matchedRuleText
+        ? `${decision.reducedRate}% reduced VAT - ${decision.matchedRuleText}`
+        : `${decision.reducedRate}% reduced VAT`,
+      reverseCharge: false,
+      source: "reduced",
+    });
+  }
+
+  return options.sort((a, b) => a.rate - b.rate);
 };
 
 export const resolveVatDecisionFromConfig = async (params: {

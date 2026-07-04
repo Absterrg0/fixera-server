@@ -20,6 +20,7 @@ export const getPlatformSettings = async (req: Request, res: Response, next: Nex
         commissionPercent: config.commissionPercent,
         companyVatNumber: config.companyVatNumber || '',
         companyAddress: config.companyAddress || {},
+        eInvoicing: config.eInvoicing || {},
         lastModified: config.lastModified,
         version: config.version,
       }
@@ -42,7 +43,7 @@ export const updatePlatformSettings = async (req: Request, res: Response, next: 
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
 
-    const { commissionPercent, companyVatNumber, companyAddress } = req.body;
+    const { commissionPercent, companyVatNumber, companyAddress, eInvoicing } = req.body;
 
     if (typeof commissionPercent !== 'number' || !Number.isFinite(commissionPercent)) {
       return res.status(400).json({
@@ -73,6 +74,15 @@ export const updatePlatformSettings = async (req: Request, res: Response, next: 
         country: typeof companyAddress.country === 'string' ? companyAddress.country.trim() : config.companyAddress?.country,
       };
     }
+    if (eInvoicing && typeof eInvoicing === 'object') {
+      config.eInvoicing = {
+        peppolEnabled: Boolean(eInvoicing.peppolEnabled),
+        provider: ['odoo', 'billit', 'manual'].includes(eInvoicing.provider) ? eInvoicing.provider : 'manual',
+        peppolParticipantId: typeof eInvoicing.peppolParticipantId === 'string'
+          ? eInvoicing.peppolParticipantId.trim()
+          : config.eInvoicing?.peppolParticipantId,
+      };
+    }
     config.lastModifiedBy = adminUser._id as any;
     await config.save();
 
@@ -84,6 +94,7 @@ export const updatePlatformSettings = async (req: Request, res: Response, next: 
         commissionPercent: config.commissionPercent,
         companyVatNumber: config.companyVatNumber || '',
         companyAddress: config.companyAddress || {},
+        eInvoicing: config.eInvoicing || {},
         lastModified: config.lastModified,
         version: config.version,
       }

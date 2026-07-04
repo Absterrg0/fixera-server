@@ -487,7 +487,8 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
         }
       }
 
-      const wantsPaymentAtCheckout = paymentAtCheckoutRequested;
+      const wantsPaymentAtCheckout =
+        paymentAtCheckoutRequested && bookingData.vatDecision?.action !== "rfq";
       if (wantsPaymentAtCheckout) {
         if (
           typeof subprojectIndex !== "number" ||
@@ -1568,6 +1569,59 @@ export const getMyPayments = async (req: Request, res: Response, next: NextFunct
     });
   } catch (error: any) {
     console.error('Get my payments error:', error);
+    next(error);
+  }
+};
+
+export const proceedAtStandardVatRate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?._id?.toString();
+    const { bookingId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, msg: "Unauthorized" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId as string)) {
+      return res.status(400).json({ success: false, msg: "Invalid booking ID" });
+    }
+
+    const booking = await Booking.findById(bookingId).populate("customer", "customerType");
+    if (!booking) {
+      return res.status(404).json({ success: false, msg: "Booking not found" });
+    }
+
+    if (booking.customer._id.toString() !== userId) {
+      return res.status(403).json({ success: false, msg: "Only the customer can update VAT preference" });
+    }
+
+    if (booking.vatDecision?.action !== "rfq") {
+      return res.status(400).json({
+        success: false,
+        msg: "Standard-rate override is only available when VAT review is required",
+      });
+    }
+
+    const standardRate = Number.isFinite(booking.vatDecision.standardRate)
+      ? booking.vatDecision.standardRate!
+      : booking.vatDecision.appliedRate ?? 21;
+
+    booking.vatDecision = {
+      ...booking.vatDecision,
+      action: "standard_rate",
+      appliedRate: standardRate,
+      explanation: `Customer chose to proceed at the standard VAT rate (${standardRate}%).`,
+      matchedRuleText: undefined,
+    };
+    await booking.save();
+
+    return res.status(200).json({
+      success: true,
+      msg: "Booking updated to standard VAT rate",
+      booking,
+    });
+  } catch (error: any) {
+    console.error("Proceed at standard VAT rate error:", error);
     next(error);
   }
 };

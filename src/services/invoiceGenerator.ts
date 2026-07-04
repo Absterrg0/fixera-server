@@ -13,6 +13,8 @@ interface InvoiceData {
   invoiceNumber: string;
   invoiceDate: Date;
   bookingNumber: string;
+  documentType?: "invoice" | "credit_note";
+  relatedInvoiceNumber?: string;
 
   // Customer info
   customer: {
@@ -81,6 +83,8 @@ interface InvoiceBooking {
     title?: string;
     category?: string;
     service?: string;
+    extraOptions?: Array<{ name?: string; _id?: string }>;
+    subprojects?: Array<{ title?: string; description?: string }>;
   };
   customer: {
     name: string;
@@ -130,8 +134,19 @@ interface InvoiceBooking {
   actualEndDate?: Date;
   scheduledStartDate?: Date;
   scheduledExecutionEndDate?: Date;
-  extraCosts?: { name: string; amount: number; justification?: string }[];
+  extraCosts?: {
+    name: string;
+    amount: number;
+    justification?: string;
+    type?: string;
+    estimatedUnits?: number;
+    actualUnits?: number;
+    unitPrice?: number;
+  }[];
   extraCostTotal?: number;
+  selectedExtraOptions?: Array<{ extraOptionId?: string; bookedPrice?: number; name?: string }>;
+  selectedSubprojectIndex?: number;
+  subprojects?: Array<{ title?: string; description?: string }>;
 }
 
 /**
@@ -154,6 +169,24 @@ export async function generateInvoiceNumber(): Promise<string> {
   }
 
   return `INV-${year}-${String(sequence.value).padStart(6, "0")}`;
+}
+
+export async function generateCreditNoteNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const sequence = await InvoiceSequence.findOneAndUpdate(
+    { year },
+    {
+      $setOnInsert: { year, value: 0 },
+      $inc: { value: 1 },
+    },
+    { new: true, upsert: true }
+  );
+
+  if (!sequence) {
+    throw new Error("Failed to generate credit note sequence");
+  }
+
+  return `CN-${year}-${String(sequence.value).padStart(6, "0")}`;
 }
 
 /**
@@ -193,14 +226,17 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
       }
 
       // Invoice title
-      doc.fontSize(20).text("INVOICE", 400, 50, { align: "right" });
+      doc.fontSize(20).text(data.documentType === "credit_note" ? "CREDIT NOTE" : "INVOICE", 400, 50, { align: "right" });
 
       // Invoice details
       doc
         .fontSize(10)
-        .text(`Invoice #: ${data.invoiceNumber}`, 400, 75, { align: "right" })
+        .text(`${data.documentType === "credit_note" ? "Credit note" : "Invoice"} #: ${data.invoiceNumber}`, 400, 75, { align: "right" })
         .text(`Date: ${invoiceDateText}`, 400, 90, { align: "right" })
         .text(`Booking #: ${data.bookingNumber}`, 400, 105, { align: "right" });
+      if (data.relatedInvoiceNumber) {
+        doc.text(`Related invoice: ${data.relatedInvoiceNumber}`, 400, 120, { align: "right" });
+      }
 
       // Horizontal line
       doc.moveTo(50, 130).lineTo(550, 130).stroke();
@@ -355,10 +391,14 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
  * This should be called after payment is captured
  */
 export async function generateBookingInvoice(
-  booking: InvoiceBooking
+  booking: InvoiceBooking,
+  options?: { creditNote?: boolean; relatedInvoiceNumber?: string }
 ): Promise<{ invoiceNumber: string; pdfBuffer: Buffer }> {
-  const invoiceNumber = await generateInvoiceNumber();
+  const invoiceNumber = options?.creditNote
+    ? await generateCreditNoteNumber()
+    : await generateInvoiceNumber();
   const invoiceDate = new Date();
+  const sign = options?.creditNote ? -1 : 1;
 
   const customer = booking.customer;
   const professional = booking.professional;
@@ -368,20 +408,52 @@ export async function generateBookingInvoice(
     || booking.quoteVersions?.[booking.quoteVersions.length - 1];
   const quoteLines = currentQuote?.pricingLines?.map((line) => ({
     description: line.description,
-    amount: line.price,
+    amount: line.price * sign,
     vatRate: line.vatRate,
   })) || [];
-  const extraCostLines = (booking.extraCosts || []).map((cost) => ({
-    description: `Extra cost: ${cost.name}${cost.justification ? ` - ${cost.justification}` : ""}`,
-    amount: cost.amount,
-    vatRate: booking.payment.vatRate ?? 0,
-  }));
+
+  const selectedSubproject =
+    typeof booking.selectedSubprojectIndex === "number" &&
+    Array.isArray(booking.project?.subprojects) &&
+    booking.selectedSubprojectIndex >= 0 &&
+    booking.selectedSubprojectIndex < booking.project.subprojects.length
+      ? booking.project.subprojects[booking.selectedSubprojectIndex]
+      : undefined;
+
+  const optionLines = (booking.selectedExtraOptions || []).map((option) => {
+    const projectOption = (booking as any).project?.extraOptions?.find(
+      (entry: any, index: number) =>
+        String(entry?._id || index) === String(option.extraOptionId) ||
+        String(index) === String(option.extraOptionId)
+    );
+    return {
+      description: `Option: ${projectOption?.name || option.name || option.extraOptionId || "Extra option"}`,
+      amount: (option.bookedPrice ?? 0) * sign,
+      vatRate: booking.payment.vatRate ?? 0,
+    };
+  });
+
+  const extraCostLines = (booking.extraCosts || []).map((cost) => {
+    const unitDetail =
+      cost.type === "unit_adjustment" &&
+      Number.isFinite(cost.actualUnits) &&
+      Number.isFinite(cost.estimatedUnits)
+        ? ` (${cost.estimatedUnits} est. → ${cost.actualUnits} actual)`
+        : cost.type === "unit_adjustment" && Number.isFinite(cost.actualUnits)
+          ? ` (${cost.actualUnits} units)`
+          : "";
+    return {
+      description: `Extra cost: ${cost.name}${unitDetail}${cost.justification ? ` - ${cost.justification}` : ""}`,
+      amount: cost.amount * sign,
+      vatRate: booking.payment.vatRate ?? 0,
+    };
+  });
   const discount = booking.payment.discount;
   const discounts = [
-    discount?.loyaltyAmount ? { label: "Loyalty discount", amount: discount.loyaltyAmount } : undefined,
-    discount?.repeatBuyerAmount ? { label: "Repeat buyer discount", amount: discount.repeatBuyerAmount } : undefined,
-    discount?.pointsDiscountAmount ? { label: "Points discount", amount: discount.pointsDiscountAmount } : undefined,
-    discount?.codeDiscountAmount ? { label: `Discount code${discount.codeLabel ? ` (${discount.codeLabel})` : ""}`, amount: discount.codeDiscountAmount } : undefined,
+    discount?.loyaltyAmount ? { label: "Loyalty discount", amount: discount.loyaltyAmount * sign } : undefined,
+    discount?.repeatBuyerAmount ? { label: "Repeat buyer discount", amount: discount.repeatBuyerAmount * sign } : undefined,
+    discount?.pointsDiscountAmount ? { label: "Points discount", amount: discount.pointsDiscountAmount * sign } : undefined,
+    discount?.codeDiscountAmount ? { label: `Discount code${discount.codeLabel ? ` (${discount.codeLabel})` : ""}`, amount: discount.codeDiscountAmount * sign } : undefined,
   ].filter(Boolean) as { label: string; amount: number }[];
 
   const fallbackReverseChargeHeuristic =
@@ -397,6 +469,8 @@ export async function generateBookingInvoice(
     invoiceNumber,
     invoiceDate,
     bookingNumber: booking.bookingNumber || booking._id.toString(),
+    documentType: options?.creditNote ? "credit_note" : "invoice",
+    relatedInvoiceNumber: options?.relatedInvoiceNumber,
 
     customer: {
       name: customer.name,
@@ -418,22 +492,24 @@ export async function generateBookingInvoice(
     },
 
     payment: {
-      netAmount: booking.payment.netAmount ?? 0,
-      vatAmount: booking.payment.vatAmount ?? 0,
+      netAmount: (booking.payment.netAmount ?? 0) * sign,
+      vatAmount: (booking.payment.vatAmount ?? 0) * sign,
       vatRate: booking.payment.vatRate ?? 0,
-      totalWithVat: booking.payment.totalWithVat ?? 0,
+      totalWithVat: (booking.payment.totalWithVat ?? 0) * sign,
       currency: booking.payment.currency || "EUR",
     },
 
     serviceDescription:
       [
         booking.project?.title ? `Project: ${booking.project.title}` : undefined,
+        selectedSubproject?.title ? `Package: ${selectedSubproject.title}` : undefined,
+        selectedSubproject?.description ? `Package details: ${selectedSubproject.description}` : undefined,
         booking.rfqData?.serviceType ? `Service: ${booking.rfqData.serviceType}` : undefined,
         currentQuote?.scope ? `Scope: ${currentQuote.scope}` : undefined,
         currentQuote?.description || booking.quote?.description || booking.rfqData?.description || "Property service",
       ].filter(Boolean).join("\n"),
 
-    lineItems: [...quoteLines, ...extraCostLines],
+    lineItems: [...quoteLines, ...optionLines, ...extraCostLines],
     discounts,
     actualStartDate: booking.actualStartDate || booking.scheduledStartDate,
     actualEndDate: booking.actualEndDate || booking.scheduledExecutionEndDate,

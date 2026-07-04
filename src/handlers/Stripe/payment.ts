@@ -57,6 +57,7 @@ const ALLOWED_PAYMENT_OVERRIDE_KEYS = new Set([
   'canceledAt',
   'invoiceNumber',
   'invoiceUrl',
+  'invoiceUblUrl',
   'invoiceGeneratedAt',
   'metadata',
   'notes',
@@ -93,8 +94,13 @@ const buildPaymentUpsertBase = (booking: any, overrides: Record<string, any> = {
     vatAmount: paymentSummary.vatAmount,
     vatRate: paymentSummary.vatRate,
     totalWithVat: paymentSummary.totalWithVat || amount,
+    reverseCharge: paymentSummary.reverseCharge,
     platformCommission: paymentSummary.platformCommission,
     professionalPayout: paymentSummary.professionalPayout,
+    invoiceNumber: paymentSummary.invoiceNumber,
+    invoiceUrl: paymentSummary.invoiceUrl,
+    invoiceUblUrl: paymentSummary.invoiceUblUrl,
+    invoiceGeneratedAt: paymentSummary.invoiceGeneratedAt,
     ...filterPaymentOverrides(overrides),
   };
 };

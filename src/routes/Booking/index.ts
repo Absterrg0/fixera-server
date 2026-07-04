@@ -10,6 +10,7 @@ import {
   updateBookingStatus,
   cancelBooking,
   uploadRFQAttachment,
+  proceedAtStandardVatRate,
 } from '../../handlers/Booking';
 import {
   respondToQuoteWithPayment,
@@ -64,6 +65,9 @@ router.get('/refund-requests', listProfessionalRefundRequests);
 
 // Get single booking by ID
 router.get('/:bookingId', getBookingById);
+
+// Customer opts to proceed at standard VAT when RFQ review was triggered
+router.post('/:bookingId/vat-proceed-standard', proceedAtStandardVatRate);
 
 // Submit post-booking answers (Customer only)
 router.post('/:bookingId/post-booking-answers', submitPostBookingAnswers);

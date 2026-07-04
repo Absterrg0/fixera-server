@@ -13,6 +13,11 @@ export interface IPlatformSettings extends Omit<Document, '_id'> {
     postalCode?: string;
     country?: string;
   };
+  eInvoicing?: {
+    peppolEnabled?: boolean;
+    provider?: 'odoo' | 'billit' | 'manual';
+    peppolParticipantId?: string;
+  };
   lastModifiedBy: mongoose.Types.ObjectId;
   lastModified: Date;
   version: number;
@@ -44,6 +49,11 @@ const platformSettingsSchema = new Schema<IPlatformSettings>({
     city: { type: String, trim: true },
     postalCode: { type: String, trim: true },
     country: { type: String, trim: true, default: 'Belgium' },
+  },
+  eInvoicing: {
+    peppolEnabled: { type: Boolean, default: false },
+    provider: { type: String, enum: ['odoo', 'billit', 'manual'], default: 'manual' },
+    peppolParticipantId: { type: String, trim: true },
   },
   lastModifiedBy: {
     type: mongoose.Schema.Types.ObjectId,

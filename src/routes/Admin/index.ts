@@ -38,7 +38,7 @@ import {
   getCategories,
   getServicesByCategory
 } from "../../handlers/Admin/serviceConfigurationManagement";
-import { getPayments, capturePayment } from "../../handlers/Admin/payments";
+import { getPayments, capturePayment, generatePaymentInvoice, generatePaymentCreditNote } from "../../handlers/Admin/payments";
 import {
   getReferralConfig,
   updateReferralConfig,
@@ -213,6 +213,8 @@ adminRouter.route('/service-configurations/:id').delete(deleteServiceConfigurati
 adminRouter.route('/service-configurations/:id/toggle-active').patch(toggleServiceConfigurationActive);
 adminRouter.route('/payments').get(getPayments);
 adminRouter.route('/payments/:paymentId/capture').post(capturePayment);
+adminRouter.route('/payments/:paymentId/invoice').post(generatePaymentInvoice);
+adminRouter.route('/payments/:paymentId/credit-note').post(generatePaymentCreditNote);
 
 // Review moderation routes
 adminRouter.route('/reviews').get(getAdminReviews);

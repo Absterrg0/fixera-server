@@ -14,6 +14,7 @@ import PlatformSettings from '../../models/platformSettings';
 import { addWorkingDays } from '../../utils/workingDays';
 import { getNextSequence } from '../../utils/counterSequence';
 import { createPaymentIntent } from '../Stripe/payment';
+import { getVatRateOptionsFromConfig } from '../../utils/vatManagement';
 import {
   sendRfqAcceptedEmail,
   sendRfqRejectedEmail,
@@ -33,6 +34,95 @@ const getSafeCommissionPercent = async (): Promise<number> => {
   } catch (error) {
     console.error('Failed to load platform settings for quotation commission:', error);
     return 0;
+  }
+};
+
+const getVatAnswersFromBooking = (booking: any): Record<string, unknown> => {
+  const stored = booking.vatDecision?.answers;
+  if (Array.isArray(stored)) {
+    return stored.reduce((acc: Record<string, unknown>, entry: { fieldName?: string; value?: unknown }) => {
+      if (entry?.fieldName) acc[entry.fieldName] = entry.value;
+      return acc;
+    }, {});
+  }
+  return {};
+};
+
+const getAllowedVatOptionsForBooking = async (booking: any) => {
+  const customer = booking.customer as any;
+  const project = booking.project as any;
+  const country = booking.vatDecision?.country
+    || customer?.location?.country
+    || project?.distance?.countryCode
+    || 'BE';
+
+  return getVatRateOptionsFromConfig({
+    serviceConfigurationId: project?.serviceConfigurationId?.toString(),
+    category: project?.category,
+    service: project?.service,
+    areaOfWork: project?.areaOfWork,
+    country,
+    customerType: customer?.customerType || 'individual',
+    answers: getVatAnswersFromBooking(booking),
+  });
+};
+
+const validatePricingLinesAgainstAllowedVat = async (booking: any, lines: Array<{ vatRate: number }>) => {
+  const options = await getAllowedVatOptionsForBooking(booking);
+  const allowedRates = new Set(options.map(option => Number(option.rate)));
+  const invalidLine = lines.find(line => !allowedRates.has(Number(line.vatRate)));
+  if (invalidLine) {
+    return {
+      valid: false,
+      message: `VAT rate ${invalidLine.vatRate}% is not available for this booking. Allowed rates: ${options.map(option => `${option.rate}%`).join(', ') || 'none'}.`,
+    };
+  }
+  return { valid: true };
+};
+
+export const getQuotationVatRateOptions = async (req: Request, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = (req as any).user?._id?.toString();
+
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
+    const booking = await Booking.findById(bookingId)
+      .populate('customer', 'customerType location vatNumber businessName')
+      .populate('professional', '_id')
+      .populate('project', 'serviceConfigurationId category service areaOfWork distance');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
+    }
+
+    const professionalId = (booking.professional as any)?._id || booking.professional;
+    if (professionalId?.toString() !== userId) {
+      return res.status(403).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Only the assigned professional can view VAT options' } });
+    }
+
+    const customer = booking.customer as any;
+    const project = booking.project as any;
+    const country = booking.vatDecision?.country
+      || customer?.location?.country
+      || project?.distance?.countryCode
+      || 'BE';
+
+    const options = await getAllowedVatOptionsForBooking(booking);
+
+    return res.json({
+      success: true,
+      data: {
+        country,
+        customerType: customer?.customerType || 'individual',
+        options,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error loading quotation VAT rate options:', error);
+    return res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Failed to load VAT options' } });
   }
 };
 
@@ -384,6 +474,11 @@ export const submitQuotation = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be submitted when status is rfq_accepted or draft_quote' } });
     }
 
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    if (!vatValidation.valid) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
+    }
+
     const now = new Date();
     const versionNumber = 1;
 
@@ -538,6 +633,11 @@ export const editQuotation = async (req: Request, res: Response) => {
 
     if (!['quoted', 'quote_rejected'].includes(booking.status)) {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be edited when status is quoted or quote_rejected' } });
+    }
+
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    if (!vatValidation.valid) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
     }
 
     const now = new Date();

@@ -6,7 +6,11 @@
 
 import { VATCalculation, VATCalculationParams } from '../Types/stripe';
 import { EU_COUNTRIES } from './viesApi';
-import { getStandardVatRate } from './vatManagement';
+import {
+  B2B_VAT_EXEMPTION_NOTE,
+  getStandardVatRate,
+  isB2BSameAsB2CCountry,
+} from './vatManagement';
 
 // VAT rates by country (standard rates)
 const VAT_RATES: Record<string, number> = {
@@ -104,75 +108,14 @@ export function calculateVAT(params: VATCalculationParams): VATCalculation {
     amount,
     customerCountry,
     customerVATNumber,
-    professionalCountry,
     customerType,
   } = params;
 
-  // Normalize country codes
   const customerCountryUpper = customerCountry.toUpperCase();
-  const professionalCountryUpper = professionalCountry.toUpperCase();
-  const platformCountry = professionalCountryUpper;
   const roundAmount = (value: number): number => Math.round(value * 100) / 100;
   const localRate = getVATRate(customerCountryUpper);
 
-  // ==================== Belgium B2C ====================
-  if (customerCountryUpper === platformCountry && customerType === 'individual') {
-    const vatRate = localRate;
-    const vatAmountRaw = (amount * vatRate) / 100;
-    const vatAmount = roundAmount(vatAmountRaw);
-    const total = roundAmount(amount + vatAmount);
-    return {
-      vatRate,
-      vatAmount,
-      total,
-      reverseCharge: false,
-    };
-  }
-
-  // ==================== Belgium B2B ====================
-  if (
-    customerCountryUpper === platformCountry &&
-    customerType === 'business'
-  ) {
-    const vatRate = localRate;
-    const vatAmountRaw = (amount * vatRate) / 100;
-    const vatAmount = roundAmount(vatAmountRaw);
-    const total = roundAmount(amount + vatAmount);
-    return {
-      vatRate,
-      vatAmount,
-      total,
-      reverseCharge: false,
-      vatRegistrationNumber: customerVATNumber || undefined,
-    };
-  }
-
-  // ==================== EU (ex-BE) B2C ====================
-  if (
-    isEUCountry(customerCountryUpper) &&
-    customerCountryUpper !== platformCountry &&
-    customerType === 'individual'
-  ) {
-    const vatRate = localRate;
-    const vatAmountRaw = (amount * vatRate) / 100;
-    const vatAmount = roundAmount(vatAmountRaw);
-    const total = roundAmount(amount + vatAmount);
-    return {
-      vatRate,
-      vatAmount,
-      total,
-      reverseCharge: false,
-    };
-  }
-
-  // ==================== EU (ex-BE) B2B ====================
-  if (
-    isEUCountry(customerCountryUpper) &&
-    customerCountryUpper !== platformCountry &&
-    customerType === 'business' &&
-    validateVATNumberFormat(customerVATNumber)
-  ) {
-    // Reverse charge - customer pays VAT in their country
+  if (customerType === 'business' && !isB2BSameAsB2CCountry(customerCountryUpper)) {
     return {
       vatRate: 0,
       vatAmount: 0,
@@ -182,40 +125,7 @@ export function calculateVAT(params: VATCalculationParams): VATCalculation {
     };
   }
 
-  // ==================== EU (ex-BE) B2B without valid VAT ====================
-  if (
-    isEUCountry(customerCountryUpper) &&
-    customerCountryUpper !== platformCountry &&
-    customerType === 'business' &&
-    !validateVATNumberFormat(customerVATNumber)
-  ) {
-    // Treat as B2C if VAT number is invalid
-    const vatRate = localRate;
-    const vatAmountRaw = (amount * vatRate) / 100;
-    const vatAmount = roundAmount(vatAmountRaw);
-    const total = roundAmount(amount + vatAmount);
-    return {
-      vatRate,
-      vatAmount,
-      total,
-      reverseCharge: false,
-    };
-  }
-
-  // ==================== Non-EU ====================
-  if (!isEUCountry(customerCountryUpper)) {
-    // No VAT for non-EU customers
-    return {
-      vatRate: 0,
-      vatAmount: 0,
-      total: roundAmount(amount),
-      reverseCharge: false,
-    };
-  }
-
-  // ==================== Default (Fallback) ====================
-  // Apply Belgian VAT by default
-  const vatRate = 21;
+  const vatRate = localRate;
   const vatAmountRaw = (amount * vatRate) / 100;
   const vatAmount = roundAmount(vatAmountRaw);
   const total = roundAmount(amount + vatAmount);
@@ -224,6 +134,7 @@ export function calculateVAT(params: VATCalculationParams): VATCalculation {
     vatAmount,
     total,
     reverseCharge: false,
+    vatRegistrationNumber: customerType === 'business' ? customerVATNumber || undefined : undefined,
   };
 }
 
@@ -238,7 +149,7 @@ export function getVATExplanation(
   customerCountry: string
 ): string {
   if (calculation.reverseCharge) {
-    return `VAT reverse charge applies. Customer is responsible for declaring VAT in ${customerCountry}.`;
+    return B2B_VAT_EXEMPTION_NOTE;
   }
 
   if (calculation.vatRate === 0 && !isEUCountry(customerCountry)) {

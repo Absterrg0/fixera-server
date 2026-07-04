@@ -265,7 +265,18 @@ export interface IBooking extends Document {
 
     invoiceNumber?: string;
     invoiceUrl?: string;
+    invoiceUblUrl?: string;
     invoiceGeneratedAt?: Date;
+    peppolDispatchStatus?: string;
+    peppolDispatchReference?: string;
+    peppolDispatchedAt?: Date;
+    creditNoteNumber?: string;
+    creditNoteUrl?: string;
+    creditNoteUblUrl?: string;
+    creditNoteGeneratedAt?: Date;
+    creditNoteRelatedInvoiceNumber?: string;
+    creditNotePeppolDispatchStatus?: string;
+    creditNotePeppolDispatchReference?: string;
 
     // Auto-discount breakdown
     discount?: {
@@ -817,7 +828,18 @@ const BookingSchema = new Schema({
     // Invoice
     invoiceNumber: { type: String },
     invoiceUrl: { type: String },
+    invoiceUblUrl: { type: String },
     invoiceGeneratedAt: { type: Date },
+    peppolDispatchStatus: { type: String },
+    peppolDispatchReference: { type: String },
+    peppolDispatchedAt: { type: Date },
+    creditNoteNumber: { type: String },
+    creditNoteUrl: { type: String },
+    creditNoteUblUrl: { type: String },
+    creditNoteGeneratedAt: { type: Date },
+    creditNoteRelatedInvoiceNumber: { type: String },
+    creditNotePeppolDispatchStatus: { type: String },
+    creditNotePeppolDispatchReference: { type: String },
 
     // Auto-discount breakdown
     discount: {
