@@ -7,6 +7,20 @@ import { getEffectiveAllowedDomains } from './domains';
 import { rejectSubmission, verifyAndReward } from './rewards';
 
 const LOG_PREFIX = '[backlink]';
+const STUCK_VERIFYING_MS = 10 * 60 * 1000;
+
+async function rejectStuckVerifying(
+  submissionId: mongoose.Types.ObjectId,
+  reason: string,
+): Promise<void> {
+  const config = await BacklinkConfig.getCurrentConfig();
+  const submission = await BacklinkSubmission.findOne({
+    _id: submissionId,
+    status: 'verifying',
+  });
+  if (!submission) return;
+  await rejectSubmission(submission, reason, config);
+}
 
 /**
  * Crawl the submitted URL via Firecrawl, check for a Fixera link, and
@@ -28,47 +42,74 @@ export async function verifyBacklinkSubmission(
     return;
   }
 
-  const config = await BacklinkConfig.getCurrentConfig();
-
-  if (!config.isEnabled) {
-    await rejectSubmission(submission, 'Program disabled', config);
-    return;
-  }
-
-  const allowedDomains = getEffectiveAllowedDomains(config);
-
-  let scrapeResult;
   try {
-    scrapeResult = await scrapePageForLinks(
-      submission.submittedUrl,
-      config.crawlTimeoutMs,
+    const config = await BacklinkConfig.getCurrentConfig();
+
+    if (!config.isEnabled) {
+      await rejectSubmission(submission, 'Program disabled', config);
+      return;
+    }
+
+    const allowedDomains = getEffectiveAllowedDomains(config);
+
+    let scrapeResult;
+    try {
+      scrapeResult = await scrapePageForLinks(
+        submission.submittedUrl,
+        config.crawlTimeoutMs,
+      );
+    } catch (err) {
+      const reason =
+        err instanceof FirecrawlError
+          ? `Crawl failed: ${err.message}`
+          : 'Crawl failed: unexpected error';
+
+      await rejectSubmission(submission, reason, config);
+      return;
+    }
+
+    const foundLinks = extractFixeraLinks(
+      scrapeResult,
+      allowedDomains,
+      config.requireFollowLink,
     );
+
+    if (foundLinks.length === 0) {
+      await rejectSubmission(
+        submission,
+        `No link to ${allowedDomains.join(' or ')} was found on the page`,
+        config,
+      );
+      return;
+    }
+
+    await verifyAndReward(submission, foundLinks, scrapeResult, config);
   } catch (err) {
-    const reason =
-      err instanceof FirecrawlError
-        ? `Crawl failed: ${err.message}`
-        : 'Crawl failed: unexpected error';
-
-    await rejectSubmission(submission, reason, config);
-    return;
-  }
-
-  const foundLinks = extractFixeraLinks(
-    scrapeResult,
-    allowedDomains,
-    config.requireFollowLink,
-  );
-
-  if (foundLinks.length === 0) {
-    await rejectSubmission(
-      submission,
-      `No link to ${allowedDomains.join(' or ')} was found on the page`,
-      config,
+    console.error(
+      `${LOG_PREFIX} Unhandled error in verifyBacklinkSubmission for ${submissionId}:`,
+      err,
     );
-    return;
+    await rejectStuckVerifying(
+      submissionId,
+      'Verification failed unexpectedly — please try again later',
+    );
   }
+}
 
-  await verifyAndReward(submission, foundLinks, scrapeResult, config);
+/** Reject submissions left in `verifying` long after a crawl should have finished. */
+export async function recoverStuckVerifyingSubmissions(): Promise<void> {
+  const cutoff = new Date(Date.now() - STUCK_VERIFYING_MS);
+  const stuck = await BacklinkSubmission.find({
+    status: 'verifying',
+    updatedAt: { $lt: cutoff },
+  }).select('_id');
+
+  for (const submission of stuck) {
+    await rejectStuckVerifying(
+      submission._id,
+      'Verification timed out — please resubmit',
+    );
+  }
 }
 
 export function scheduleVerification(
@@ -78,6 +119,10 @@ export function scheduleVerification(
     console.error(
       `${LOG_PREFIX} Unhandled error in verifyBacklinkSubmission for ${submissionId}:`,
       err,
+    );
+    void rejectStuckVerifying(
+      submissionId,
+      'Verification failed unexpectedly — please try again later',
     );
   });
 }

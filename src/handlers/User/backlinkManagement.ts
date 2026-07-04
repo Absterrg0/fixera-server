@@ -6,15 +6,16 @@ import {
   getUserBacklinkStats,
 } from '../../utils/backlink';
 import BacklinkSubmission from '../../models/backlinkSubmission';
+import { BACKLINK_SUBMISSION_PUBLIC_FIELDS } from '../../utils/backlink/constants';
 
 // ------------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------------
 
 function getUserId(req: Request): mongoose.Types.ObjectId | null {
-  const id = (req as any).user?._id;
+  const id = req.user?._id;
   if (!id) return null;
-  return new mongoose.Types.ObjectId(id.toString());
+  return new mongoose.Types.ObjectId(id);
 }
 
 function extractIp(req: Request): string {
@@ -97,9 +98,7 @@ export const listBacklinks = async (
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select(
-          'submittedUrl domain status rewardPoints rewardIssuedAt rejectionReason adminReviewReason lastRejectedAt revokedAt createdAt updatedAt',
-        ),
+        .select(BACKLINK_SUBMISSION_PUBLIC_FIELDS),
       BacklinkSubmission.countDocuments({ userId }),
     ]);
 

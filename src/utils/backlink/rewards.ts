@@ -99,7 +99,7 @@ export async function verifyAndReward(
   }
 
   const verified = await BacklinkSubmission.findOneAndUpdate(
-    { _id: submission._id, status: 'verifying' },
+    { _id: submission._id, status: 'verifying', pointTransactionId: { $exists: false } },
     {
       $set: {
         status: 'verified',
@@ -112,7 +112,20 @@ export async function verifyAndReward(
     { new: true },
   );
 
-  if (!verified) return;
+  if (!verified) {
+    const existing = await BacklinkSubmission.findById(submission._id).select(
+      'status pointTransactionId rewardPoints',
+    );
+    if (existing?.status === 'verified' && existing.pointTransactionId) {
+      notifyVerified(
+        submission.userId,
+        submission._id,
+        submission.domain,
+        existing.rewardPoints ?? rewardPoints,
+      );
+    }
+    return;
+  }
 
   if (verified.pointTransactionId) {
     notifyVerified(submission.userId, submission._id, submission.domain, rewardPoints);

@@ -54,8 +54,10 @@ export async function adminApproveSubmission(
         rewardIssuedAt: new Date(),
         reviewedBy: adminId,
         reviewedAt: new Date(),
-        rejectionReason: undefined,
-        adminReviewReason: undefined,
+      },
+      $unset: {
+        rejectionReason: '',
+        adminReviewReason: '',
       },
     },
     { new: true },
@@ -158,19 +160,36 @@ export async function adminRevokeSubmission(
   adminId: mongoose.Types.ObjectId,
   reason: string,
 ): Promise<IBacklinkSubmission> {
-  const submission = await BacklinkSubmission.findById(submissionId);
-  if (!submission) throw new BacklinkError('Submission not found', 404);
+  const claimed = await BacklinkSubmission.findOneAndUpdate(
+    { _id: submissionId, status: 'verified' },
+    {
+      $set: {
+        status: 'revoked',
+        revokedReason: reason,
+        revokedAt: new Date(),
+        revokedBy: adminId,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+      },
+    },
+    { new: true },
+  );
 
-  if (submission.status !== 'verified') {
+  if (!claimed) {
+    const existing = await BacklinkSubmission.findById(submissionId).select('status');
+    if (!existing) throw new BacklinkError('Submission not found', 404);
+    if (existing.status === 'revoked') {
+      throw new BacklinkError('Submission is already revoked', 400);
+    }
     throw new BacklinkError('Only verified submissions can be revoked', 400);
   }
 
-  const pointsToClawBack = submission.rewardPoints ?? 0;
+  const pointsToClawBack = claimed.rewardPoints ?? 0;
   let actuallyDeducted = 0;
   let unclawedPoints = 0;
 
   if (pointsToClawBack > 0) {
-    const user = await User.findById(submission.userId).select('points');
+    const user = await User.findById(claimed.userId).select('points');
     const currentBalance = user?.points ?? 0;
     actuallyDeducted = Math.min(pointsToClawBack, currentBalance);
     unclawedPoints = pointsToClawBack - actuallyDeducted;
@@ -178,13 +197,13 @@ export async function adminRevokeSubmission(
     if (actuallyDeducted > 0) {
       try {
         await deductPoints(
-          submission.userId,
+          claimed.userId,
           actuallyDeducted,
           'admin-adjustment',
-          `Backlink reward revoked for ${submission.domain}: ${reason}`,
+          `Backlink reward revoked for ${claimed.domain}: ${reason}`,
           {
             metadata: {
-              backlinkSubmissionId: submission._id.toString(),
+              backlinkSubmissionId: claimed._id.toString(),
               revokedBy: adminId.toString(),
               originalReward: pointsToClawBack,
               unclawedPoints,
@@ -206,12 +225,6 @@ export async function adminRevokeSubmission(
     submissionId,
     {
       $set: {
-        status: 'revoked',
-        revokedReason: reason,
-        revokedAt: new Date(),
-        revokedBy: adminId,
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
         unclawedPoints: unclawedPoints > 0 ? unclawedPoints : undefined,
       },
     },
@@ -219,15 +232,15 @@ export async function adminRevokeSubmission(
   );
 
   notifyRevoked(
-    submission.userId,
-    submission._id,
-    submission.domain,
+    claimed.userId,
+    claimed._id,
+    claimed.domain,
     pointsToClawBack,
     actuallyDeducted,
     unclawedPoints,
   );
 
-  return updated!;
+  return updated ?? claimed;
 }
 
 export async function adminReprocessSubmission(
@@ -249,9 +262,11 @@ export async function adminReprocessSubmission(
   await BacklinkSubmission.findByIdAndUpdate(submissionId, {
     $set: {
       status: 'pending_verification',
-      rejectionReason: undefined,
-      adminReviewReason: undefined,
-      lastRejectedAt: undefined,
+    },
+    $unset: {
+      rejectionReason: '',
+      adminReviewReason: '',
+      lastRejectedAt: '',
     },
   });
 

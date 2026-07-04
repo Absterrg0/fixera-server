@@ -1,5 +1,7 @@
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
+const SINGLETON_ID = 'backlink-config';
+
 export interface IBacklinkConfig extends Document {
   isEnabled: boolean;
   customerRewardPoints: number;
@@ -39,6 +41,10 @@ export const DEFAULT_BACKLINK_CONFIG = {
 
 const backlinkConfigSchema = new Schema<IBacklinkConfig>(
   {
+    _id: {
+      type: String,
+      default: SINGLETON_ID,
+    },
     isEnabled: {
       type: Boolean,
       default: DEFAULT_BACKLINK_CONFIG.isEnabled,
@@ -85,11 +91,11 @@ const backlinkConfigSchema = new Schema<IBacklinkConfig>(
   { timestamps: true },
 );
 
-/** Singleton upsert — mirrors the ReferralConfig pattern exactly. */
+/** Singleton upsert — pinned to a fixed _id to avoid duplicate config docs. */
 backlinkConfigSchema.statics.getCurrentConfig =
   async function (): Promise<IBacklinkConfig> {
     const config = await this.findOneAndUpdate(
-      {},
+      { _id: SINGLETON_ID },
       { $setOnInsert: { ...DEFAULT_BACKLINK_CONFIG, lastModified: new Date() } },
       { upsert: true, new: true },
     );
