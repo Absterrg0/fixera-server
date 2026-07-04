@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { MongoServerError } from 'mongodb';
 import BacklinkConfig from '../../models/backlinkConfig';
 import BacklinkSubmission, { IBacklinkSubmission } from '../../models/backlinkSubmission';
 import { isFixeraDomain } from './domains';
@@ -67,7 +66,7 @@ export async function createBacklinkSubmission(
     scheduleVerification(submission._id);
     return submission;
   } catch (err) {
-    if (err instanceof MongoServerError && err.code === 11000) {
+    if (err instanceof mongoose.mongo.MongoServerError && err.code === 11000) {
       const raceCheck = await canSubmitUrl(normalizedUrl, userId, config);
       if (!raceCheck.allowed) {
         throw new BacklinkError(

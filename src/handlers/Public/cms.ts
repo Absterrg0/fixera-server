@@ -8,6 +8,7 @@ import CmsContent, {
 import connectDB from "../../config/db";
 import { presignCmsDoc, presignCmsDocs } from "../../utils/cmsPresign";
 import { toSlug } from "../../utils/slug";
+import { param } from "../../utils/requestParams";
 
 const LISTING_FIELDS =
   "type title slug locale excerpt coverImage tags publishedAt seo category author authorOverride updatedAt";
@@ -17,7 +18,7 @@ const BOT_UA_RE =
 
 export const listPublicCmsContent = async (req: Request, res: Response) => {
   try {
-    const type = req.params.type as CmsContentType;
+    const type = param(req.params.type) as CmsContentType;
     if (!CMS_CONTENT_TYPES.includes(type)) {
       return res.status(404).json({ success: false, msg: "Unknown content type" });
     }
@@ -73,12 +74,12 @@ export const listPublicCmsContent = async (req: Request, res: Response) => {
 
 export const getPublicCmsContentBySlug = async (req: Request, res: Response) => {
   try {
-    const type = req.params.type as CmsContentType;
+    const type = param(req.params.type) as CmsContentType;
     if (!CMS_CONTENT_TYPES.includes(type)) {
       return res.status(404).json({ success: false, msg: "Unknown content type" });
     }
 
-    const slug = (req.params.slug || "").toLowerCase();
+    const slug = param(req.params.slug).toLowerCase();
     if (!slug) return res.status(404).json({ success: false, msg: "Not found" });
 
     const locale = typeof req.query.locale === "string" ? req.query.locale.toLowerCase() : "en";

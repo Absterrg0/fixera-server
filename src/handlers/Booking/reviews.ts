@@ -7,6 +7,7 @@ import ChatMessage from "../../models/chatMessage";
 import mongoose from "mongoose";
 import { moderateText } from "../../utils/contentModeration";
 import { uploadToS3, generateFileName, validateImageFileBuffer, deleteFromS3, presignS3Url } from "../../utils/s3Upload";
+import { params } from "../../utils/requestParams";
 
 const MAX_COMMENT_LENGTH = 1000;
 
@@ -34,7 +35,7 @@ function escapeRegex(str: string): string {
 export const submitCustomerReview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?._id?.toString();
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
 
     // Parse ratings (may be strings when sent via FormData)
     const communicationLevel = typeof req.body.communicationLevel === "string" ? parseInt(req.body.communicationLevel, 10) : req.body.communicationLevel;
@@ -199,7 +200,7 @@ export const submitCustomerReview = async (req: Request, res: Response, next: Ne
 export const submitProfessionalReview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?._id?.toString();
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { rating, comment } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
@@ -264,7 +265,7 @@ export const submitProfessionalReview = async (req: Request, res: Response, next
 export const replyToCustomerReview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?._id?.toString();
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { comment } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
@@ -323,7 +324,7 @@ export const replyToCustomerReview = async (req: Request, res: Response, next: N
 // Get all reviews for a professional (public endpoint)
 export const getProfessionalReviews = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { professionalId } = req.params;
+    const { professionalId } = params(req.params);
     const { page = "1", limit = "10", search, rating, projectId } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(professionalId)) {
@@ -477,7 +478,7 @@ export const getProfessionalReviews = async (req: Request, res: Response, next: 
 // Get all reviews for a specific project (public endpoint)
 export const getProjectReviews = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { projectId } = req.params;
+    const { projectId } = params(req.params);
     const { page = "1", limit = "10", search, rating } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(projectId)) {

@@ -7,6 +7,7 @@ import {
 } from '../../utils/backlink';
 import BacklinkSubmission from '../../models/backlinkSubmission';
 import { BACKLINK_SUBMISSION_PUBLIC_FIELDS } from '../../utils/backlink/constants';
+import { params } from '../../utils/requestParams';
 
 // ------------------------------------------------------------------
 // Helpers
@@ -164,7 +165,7 @@ export const getBacklinkById = async (
       return res.status(401).json({ success: false, msg: 'Authentication required' });
     }
 
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid submission ID' });
     }

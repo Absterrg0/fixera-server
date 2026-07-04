@@ -24,6 +24,7 @@ import {
   sendDirectQuotationEmail,
 } from '../../utils/emailService';
 import { getProfessionalDisplayName } from '../../utils/displayName';
+import { params } from '../../utils/requestParams';
 
 const getSafeCommissionPercent = async (): Promise<number> => {
   try {
@@ -155,7 +156,7 @@ const resolveLinkedSubprojectIndex = (
  */
 export const respondToRFQ = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { action, rejectionReason } = req.body;
     const userId = (req as any).user?._id?.toString();
 
@@ -256,7 +257,7 @@ export const respondToRFQ = async (req: Request, res: Response) => {
  */
 export const submitQuotation = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const userId = (req as any).user?._id?.toString();
 
     if (!userId) {
@@ -414,7 +415,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
  */
 export const editQuotation = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const userId = (req as any).user?._id?.toString();
 
     if (!userId) {
@@ -552,7 +553,7 @@ export const editQuotation = async (req: Request, res: Response) => {
  */
 export const customerRespondToQuotation = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { action, rejectionReason } = req.body;
     const userId = (req as any).user?._id?.toString();
 
@@ -861,7 +862,7 @@ export const getActiveProjects = async (req: Request, res: Response) => {
  */
 export const getQuotationVersions = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const userId = (req as any).user?._id?.toString();
 
     if (!userId) {
@@ -901,7 +902,7 @@ export const getQuotationVersions = async (req: Request, res: Response) => {
  */
 export const updateMilestoneWorkStatus = async (req: Request, res: Response) => {
   try {
-    const { bookingId, index } = req.params;
+    const { bookingId, index } = params(req.params);
     const { action } = req.body;
     const milestoneIndex = parseInt(index, 10);
     const userId = (req as any).user?._id?.toString();
@@ -1012,7 +1013,7 @@ export const updateMilestoneWorkStatus = async (req: Request, res: Response) => 
  */
 export const getMilestonePaymentStatus = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const userId = (req as any).user?._id?.toString();
 
     if (!userId) {
@@ -1061,7 +1062,7 @@ export const getMilestonePaymentStatus = async (req: Request, res: Response) => 
  */
 export const createMilestonePaymentIntent = async (req: Request, res: Response) => {
   try {
-    const { bookingId, index } = req.params;
+    const { bookingId, index } = params(req.params);
     const milestoneIndex = parseInt(index, 10);
     const userId = (req as any).user?._id?.toString();
 

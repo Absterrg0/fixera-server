@@ -2,7 +2,8 @@ import mongoose, { Document, Schema, Model } from 'mongoose';
 
 const SINGLETON_ID = 'platform-settings';
 
-export interface IPlatformSettings extends Document {
+export interface IPlatformSettings extends Omit<Document, '_id'> {
+  _id: string;
   commissionPercent: number;
   lastModifiedBy: mongoose.Types.ObjectId;
   lastModified: Date;
@@ -40,7 +41,7 @@ const platformSettingsSchema = new Schema<IPlatformSettings>({
 });
 
 // Pre-save: clamp commission, increment version + timestamp only on updates
-platformSettingsSchema.pre('save', function (next) {
+platformSettingsSchema.pre('save', function (this: IPlatformSettings, next) {
   this.commissionPercent = Math.min(Math.max(this.commissionPercent, 0), 100);
   if (!this.isNew) {
     this.version += 1;

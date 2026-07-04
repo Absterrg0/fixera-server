@@ -10,6 +10,7 @@ import {
   sendRefundCounterOfferEmail,
   sendRefundEscalatedEmail,
 } from '../../utils/emailService';
+import { params } from '../../utils/requestParams';
 
 const REFUND_FINALIZED_BOOKING_STATUS = 'cancelled';
 
@@ -140,7 +141,7 @@ export const listProfessionalRefundRequests = async (req: Request, res: Response
 export const getBookingCancellationRequest = async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     if (!userId) return res.status(401).json({ success: false, msg: 'Authentication required' });
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, msg: 'Invalid booking id' });
@@ -165,7 +166,7 @@ export const getBookingCancellationRequest = async (req: Request, res: Response)
 export const professionalRespondToCancellation = async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { decision, amount, note } = req.body || {};
     if (!userId) return res.status(401).json({ success: false, msg: 'Authentication required' });
     if (!['approve', 'counter', 'reject'].includes(decision)) {
@@ -255,7 +256,7 @@ export const professionalRespondToCancellation = async (req: Request, res: Respo
 export const customerRespondToCounterOffer = async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     const { decision } = req.body || {};
     if (!userId) return res.status(401).json({ success: false, msg: 'Authentication required' });
     if (!['accept', 'refuse'].includes(decision)) {

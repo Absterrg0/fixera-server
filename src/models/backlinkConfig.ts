@@ -2,7 +2,8 @@ import mongoose, { Document, Schema, Model } from 'mongoose';
 
 const SINGLETON_ID = 'backlink-config';
 
-export interface IBacklinkConfig extends Document {
+export interface IBacklinkConfig extends Omit<Document, '_id'> {
+  _id: string;
   isEnabled: boolean;
   customerRewardPoints: number;
   professionalRewardPoints: number;

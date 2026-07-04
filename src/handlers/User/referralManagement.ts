@@ -5,6 +5,7 @@ import Referral from '../../models/referral';
 import ReferralConfig from '../../models/referralConfig';
 import PointsConfig from '../../models/pointsConfig';
 import { generateReferralCode, getUserReferralStats, validateReferralCode, createReferral } from '../../utils/referralSystem';
+import { params } from '../../utils/requestParams';
 
 /**
  * GET /api/user/referral/stats
@@ -172,7 +173,7 @@ export const addLateReferralCode = async (req: Request, res: Response, next: Nex
  */
 export const validateReferralCodePublic = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { code } = req.params;
+    const { code } = params(req.params);
 
     const validation = await validateReferralCode(code);
 

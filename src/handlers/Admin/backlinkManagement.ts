@@ -10,6 +10,7 @@ import {
   adminReprocessSubmission,
   BacklinkError,
 } from '../../utils/backlink';
+import { params } from '../../utils/requestParams';
 
 // ------------------------------------------------------------------
 // Helpers
@@ -313,7 +314,7 @@ export const approveBacklink = async (
       return res.status(401).json({ success: false, msg: 'Admin authentication required' });
     }
 
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid submission ID' });
     }
@@ -348,7 +349,7 @@ export const rejectBacklink = async (
       return res.status(401).json({ success: false, msg: 'Admin authentication required' });
     }
 
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { reason } = req.body as { reason?: unknown };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -390,7 +391,7 @@ export const revokeBacklink = async (
       return res.status(401).json({ success: false, msg: 'Admin authentication required' });
     }
 
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { reason } = req.body as { reason?: unknown };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -428,7 +429,7 @@ export const reprocessBacklink = async (
   next: NextFunction,
 ) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid submission ID' });
     }

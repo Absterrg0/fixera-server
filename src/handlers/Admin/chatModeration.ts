@@ -5,6 +5,7 @@ import ChatMessage from "../../models/chatMessage";
 import Conversation from "../../models/conversation";
 import Booking from "../../models/booking";
 import User from "../../models/user";
+import { params } from "../../utils/requestParams";
 
 const VALID_STATUSES = ["pending", "reviewed", "dismissed"] as const;
 
@@ -52,7 +53,7 @@ export const listChatReports = async (req: Request, res: Response) => {
 
 export const getChatReport = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid id" });
     }
@@ -107,7 +108,7 @@ export const resolveChatReport = async (req: Request, res: Response) => {
   try {
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
     const adminId = adminIdRaw?.toString();
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { action, notes } = req.body || {};
     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
       return res.status(401).json({ success: false, msg: "Unauthorized" });
@@ -215,7 +216,7 @@ export const resolveChatReport = async (req: Request, res: Response) => {
 
 export const adminGetConversation = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid id" });
     }
@@ -237,7 +238,7 @@ export const adminGetConversation = async (req: Request, res: Response) => {
 
 export const adminGetConversationMessages = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { page, limit, skip } = parsePagination(req.query);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid id" });
@@ -357,7 +358,7 @@ export const adminReplySupportChat = async (req: Request, res: Response) => {
   try {
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
     const adminId = adminIdRaw?.toString();
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { text } = req.body || {};
     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
       return res.status(401).json({ success: false, msg: "Unauthorized" });
@@ -417,7 +418,7 @@ export const adminCloseSupportChat = async (req: Request, res: Response) => {
   try {
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
     const adminId = adminIdRaw?.toString();
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
       return res.status(401).json({ success: false, msg: "Unauthorized" });
     }
@@ -442,7 +443,7 @@ export const adminCloseSupportChat = async (req: Request, res: Response) => {
 
 export const adminGetBookingConversation = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, msg: "Invalid booking id" });
     }

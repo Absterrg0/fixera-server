@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import Booking from "../../models/booking";
 import mongoose from "mongoose";
+import { params } from "../../utils/requestParams";
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -118,7 +119,7 @@ const fetchReviewList = async ({
 export const hideReview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const adminId = req.user?._id;
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, msg: "Invalid booking ID" });
@@ -153,7 +154,7 @@ export const hideReview = async (req: Request, res: Response, next: NextFunction
 export const unhideReview = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const adminId = req.user?._id;
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, msg: "Invalid booking ID" });

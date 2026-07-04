@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import ServiceView from '../../models/serviceView';
 import User from '../../models/user';
 import CmsContent from '../../models/cmsContent';
+import { param } from '../../utils/requestParams';
 
 const hashVisitor = (ip: string, userAgent: string): string =>
   crypto.createHash('sha256').update(`${ip}|${userAgent}`).digest('hex').slice(0, 32);
@@ -12,7 +13,7 @@ const SERVICE_ID_PATTERN = /^[a-z0-9][a-z0-9\-_]{0,80}$/i;
 
 export const recordServiceView = async (req: Request, res: Response) => {
   try {
-    const rawServiceId = (req.params.serviceId || '').trim();
+    const rawServiceId = param(req.params.serviceId).trim();
     if (!rawServiceId || !SERVICE_ID_PATTERN.test(rawServiceId)) {
       return res.status(400).json({ success: false, error: { code: 'INVALID_SERVICE_ID', message: 'Invalid service id' } });
     }

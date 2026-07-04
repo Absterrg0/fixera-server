@@ -11,7 +11,8 @@ export interface ISocialLinks {
   youtube?: string;
 }
 
-export interface ISiteSettings extends Document {
+export interface ISiteSettings extends Omit<Document, '_id'> {
+  _id: string;
   socialLinks: ISocialLinks;
   lastModifiedBy?: mongoose.Types.ObjectId;
   lastModified: Date;
