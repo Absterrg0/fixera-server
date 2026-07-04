@@ -1025,7 +1025,7 @@ export const removeLabel = async (req: Request, res: Response) => {
   }
 
   await Conversation.findByIdAndUpdate(conversationId, {
-    $pull: { labels: { userId: toObjectId(userId), label: decodeURIComponent(label) } },
+    $pull: { labels: { userId: toObjectId(userId), label } },
   });
 
   return res.status(200).json({ success: true, msg: "Label removed" });
