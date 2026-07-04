@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export type PointTransactionType = 'earn' | 'spend';
-export type PointSource = 'referral' | 'booking_completion' | 'redemption' | 'boost' | 'admin-adjustment' | 'expiry';
+export type PointSource = 'referral' | 'booking_completion' | 'redemption' | 'boost' | 'admin-adjustment' | 'expiry' | 'backlink';
 
 export interface IPointTransaction extends Document {
   userId: mongoose.Types.ObjectId;
@@ -33,7 +33,7 @@ const pointTransactionSchema = new Schema<IPointTransaction>({
   },
   source: {
     type: String,
-    enum: ['referral', 'booking_completion', 'redemption', 'boost', 'admin-adjustment', 'expiry'],
+    enum: ['referral', 'booking_completion', 'redemption', 'boost', 'admin-adjustment', 'expiry', 'backlink'],
     required: true
   },
   amount: {
