@@ -47,6 +47,16 @@ import {
   revokeReferral
 } from "../../handlers/Admin/referralManagement";
 import {
+  getBacklinkConfig,
+  updateBacklinkConfig,
+  getBacklinkAnalytics,
+  listBacklinkSubmissions,
+  approveBacklink,
+  rejectBacklink,
+  revokeBacklink,
+  reprocessBacklink,
+} from "../../handlers/Admin/backlinkManagement";
+import {
   getPlatformSettings,
   updatePlatformSettings,
 } from "../../handlers/Admin/platformSettings";
@@ -182,6 +192,15 @@ adminRouter.route('/referral/config').put(updateReferralConfig);
 adminRouter.route('/referral/analytics').get(getReferralAnalytics);
 adminRouter.route('/referral/list').get(getReferralList);
 adminRouter.route('/referral/:referralId/revoke').put(revokeReferral);
+
+// Backlink rewards management routes
+adminRouter.route('/backlinks/config').get(getBacklinkConfig).put(updateBacklinkConfig);
+adminRouter.route('/backlinks/analytics').get(getBacklinkAnalytics);
+adminRouter.route('/backlinks/list').get(listBacklinkSubmissions);
+adminRouter.route('/backlinks/:id/approve').post(approveBacklink);
+adminRouter.route('/backlinks/:id/reject').post(rejectBacklink);
+adminRouter.route('/backlinks/:id/revoke').post(revokeBacklink);
+adminRouter.route('/backlinks/:id/reprocess').post(reprocessBacklink);
 
 // Service configuration management routes
 adminRouter.route('/service-configurations').get(getAllServiceConfigurations);

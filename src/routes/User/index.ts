@@ -43,6 +43,7 @@ import { getProfessionalFavoriteStats, dismissFavoriteNotifications } from "../.
 import { exportMyData } from "../../handlers/User/dataExport";
 import { deleteMyAccount } from "../../handlers/User/accountManagement";
 import { registerFcmToken, unregisterFcmToken, getNotificationPreferences, updateNotificationPreferences } from "../../handlers/User/fcmHandler";
+import { submitBacklink, listBacklinks, getBacklinkStats, getBacklinkById } from "../../handlers/User/backlinkManagement";
 
 const userRouter = Router();
 
@@ -148,6 +149,12 @@ userRouter.route("/me/account").delete(deleteMyAccount)
 // FCM push notifications
 userRouter.route("/fcm/token").post(registerFcmToken).delete(unregisterFcmToken)
 userRouter.route("/notification-preferences").get(getNotificationPreferences).patch(updateNotificationPreferences)
+
+// Backlink Rewards Routes
+userRouter.route("/backlinks/submit").post(submitBacklink)
+userRouter.route("/backlinks/stats").get(getBacklinkStats)
+userRouter.route("/backlinks").get(listBacklinks)
+userRouter.route("/backlinks/:id").get(getBacklinkById)
 
 // Platform commission (read-only for professionals)
 userRouter.route("/commission-rate").get(async (req, res) => {

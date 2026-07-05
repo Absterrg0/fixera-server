@@ -4,6 +4,7 @@ import SupportTicket from "../../models/supportTicket";
 import MeetingRequest from "../../models/meetingRequest";
 import connectDB from "../../config/db";
 import { IUser } from "../../models/user";
+import { params } from "../../utils/requestParams";
 
 const isValidObjectId = (id: string): boolean => mongoose.Types.ObjectId.isValid(id);
 
@@ -52,7 +53,7 @@ export const listMyTickets = async (req: Request, res: Response) => {
 export const replyToMyTicket = async (req: Request, res: Response) => {
   try {
     const user = req.user as IUser;
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) return res.status(400).json({ success: false, msg: "Invalid ticket ID" });
 
     const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";

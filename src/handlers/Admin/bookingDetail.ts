@@ -4,6 +4,7 @@ import Booking from "../../models/booking";
 import Payment from "../../models/payment";
 import CancellationRequest from "../../models/cancellationRequest";
 import { auditLog } from "../../utils/auditLogger";
+import { params } from "../../utils/requestParams";
 
 export const ADMIN_FORCEABLE_STATUSES = [
   "payment_pending",
@@ -16,7 +17,7 @@ export const ADMIN_FORCEABLE_STATUSES = [
 
 export const getAdminBookingDetail = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid id" });
     }
@@ -63,7 +64,7 @@ export const getAdminBookingDetail = async (req: Request, res: Response) => {
 
 export const forceBookingStatus = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     const { status, note } = req.body || {};
     const adminUser = (req as any).user || (req as any).admin;
 

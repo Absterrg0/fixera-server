@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import DiscountCode from "../../models/discountCode";
 import DiscountCodeUsage from "../../models/discountCodeUsage";
+import { params } from "../../utils/requestParams";
 
 const parseDate = (value: any): Date | null => {
   if (!value) return null;
@@ -118,7 +119,7 @@ export const listDiscountCodes = async (req: Request, res: Response, _next: Next
 
 export const getDiscountCode = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid id' });
     }
@@ -154,7 +155,7 @@ export const createDiscountCode = async (req: Request, res: Response, _next: Nex
 
 export const updateDiscountCode = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid id' });
     }
@@ -177,7 +178,7 @@ export const updateDiscountCode = async (req: Request, res: Response, _next: Nex
 
 export const deleteDiscountCode = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: 'Invalid id' });
     }

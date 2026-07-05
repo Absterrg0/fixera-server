@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import User from '../../models/user';
 import { anonymizeUser } from '../../utils/anonymizeUser';
 import { auditLog } from '../../utils/auditLogger';
+import { param, params } from '../../utils/requestParams';
 
 export const adminAnonymizeUser = async (req: Request, res: Response) => {
   try {
@@ -11,7 +12,7 @@ export const adminAnonymizeUser = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, msg: 'Admin authentication required' });
     }
 
-    const { userId } = req.params;
+    const { userId } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ success: false, msg: 'Invalid userId' });
     }
@@ -61,7 +62,7 @@ export const adminAnonymizeUser = async (req: Request, res: Response) => {
       req,
       action: 'admin.users.anonymize',
       targetType: 'User',
-      targetId: req.params.userId,
+      targetId: param(req.params.userId),
       status: 'failure',
       statusCode: 500,
       errorMessage: error?.message || 'unknown',

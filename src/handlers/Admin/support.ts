@@ -7,6 +7,7 @@ import MeetingRequest, {
 } from "../../models/meetingRequest";
 import connectDB from "../../config/db";
 import { IUser } from "../../models/user";
+import { params } from "../../utils/requestParams";
 
 const isValidObjectId = (id: string): boolean => mongoose.Types.ObjectId.isValid(id);
 
@@ -64,7 +65,7 @@ export const adminUpdateTicket = async (req: Request, res: Response) => {
     const admin = (req as Request & { admin?: IUser }).admin;
     if (!admin) return res.status(401).json({ success: false, msg: "Unauthorized" });
 
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) return res.status(400).json({ success: false, msg: "Invalid ticket ID" });
 
     await connectDB();
@@ -146,7 +147,7 @@ export const adminListMeetingRequests = async (req: Request, res: Response) => {
 
 export const adminUpdateMeetingRequest = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) return res.status(400).json({ success: false, msg: "Invalid request ID" });
 
     await connectDB();

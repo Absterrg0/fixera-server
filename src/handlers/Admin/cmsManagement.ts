@@ -22,6 +22,7 @@ import {
 } from "../../utils/s3Upload";
 import { presignCmsDoc, presignCmsDocs } from "../../utils/cmsPresign";
 import { toSlug } from "../../utils/slug";
+import { param, params } from "../../utils/requestParams";
 
 const isValidObjectId = (id: string): boolean => mongoose.Types.ObjectId.isValid(id);
 
@@ -266,7 +267,7 @@ export const listCmsContent = async (req: Request, res: Response) => {
 
 export const getCmsContentById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, msg: "Invalid content ID" });
     }
@@ -385,7 +386,7 @@ export const createCmsContent = async (req: Request, res: Response) => {
 
 export const updateCmsContent = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, msg: "Invalid content ID" });
     }
@@ -523,7 +524,7 @@ export const updateCmsContent = async (req: Request, res: Response) => {
 
 export const deleteCmsContent = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, msg: "Invalid content ID" });
     }
@@ -552,11 +553,11 @@ export const deleteCmsContent = async (req: Request, res: Response) => {
 
 export const getCmsPreviewBySlug = async (req: Request, res: Response) => {
   try {
-    const type = req.params.type as CmsContentType;
+    const type = param(req.params.type) as CmsContentType;
     if (!CMS_CONTENT_TYPES.includes(type)) {
       return res.status(404).json({ success: false, msg: "Unknown content type" });
     }
-    const slug = (req.params.slug || "").toLowerCase();
+    const slug = param(req.params.slug).toLowerCase();
     if (!slug) return res.status(404).json({ success: false, msg: "Not found" });
 
     const locale = typeof req.query.locale === "string" ? req.query.locale.toLowerCase() : "en";

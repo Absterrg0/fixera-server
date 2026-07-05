@@ -11,6 +11,7 @@ import { NO_PREVIOUS_VALUE, normalizePendingIdChanges } from "../../utils/pendin
 import { isValidUsernameFormat, isTooSimilarToCompanyName, generateUsernameSuggestions } from "../../utils/usernameUtils";
 import { sendProfessionalWelcomeEmail } from "../../utils/emailService";
 import ServiceConfiguration from "../../models/serviceConfiguration";
+import { params } from "../../utils/requestParams";
 
 const phoneUtil = PhoneNumberUtil.getInstance();
 
@@ -1226,7 +1227,7 @@ export const checkUsernameAvailability = async (req: Request, res: Response, nex
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
 
-    const { username } = req.params;
+    const { username } = params(req.params);
     if (!username) {
       return res.status(400).json({ success: false, available: false, reason: "Username is required" });
     }

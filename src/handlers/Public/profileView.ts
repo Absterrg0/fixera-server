@@ -3,13 +3,14 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import ProfileView from '../../models/profileView';
 import User from '../../models/user';
+import { params } from '../../utils/requestParams';
 
 const hashVisitor = (ip: string, userAgent: string): string =>
   crypto.createHash('sha256').update(`${ip}|${userAgent}`).digest('hex').slice(0, 32);
 
 export const recordProfessionalView = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'Invalid professional id' } });
     }

@@ -7,6 +7,8 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import errorHandler from './handlers/error';
 import connectDB from './config/db';
+import BacklinkSubmission from './models/backlinkSubmission';
+import { recoverStuckVerifyingSubmissions } from './utils/backlink/verifySubmission';
 import authRouter from './routes/Auth';
 import userRouter from './routes/User';
 import adminRouter from './routes/Admin';
@@ -75,9 +77,26 @@ app.use(errorHandler);
 
 // Traditional server: connect once at startup, then listen
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+const STUCK_VERIFY_SWEEP_MS = 10 * 60 * 1000;
 
 connectDB()
-  .then(() => {
+  .then(async () => {
+    try {
+      await BacklinkSubmission.syncIndexes();
+    } catch (error) {
+      console.error('BacklinkSubmission.syncIndexes failed:', error);
+    }
+    try {
+      await recoverStuckVerifyingSubmissions();
+    } catch (error) {
+      console.error('Initial stuck verification recovery failed:', error);
+    }
+    const sweepTimer = setInterval(() => {
+      void recoverStuckVerifyingSubmissions().catch((error) => {
+        console.error('Stuck verification sweep failed:', error);
+      });
+    }, STUCK_VERIFY_SWEEP_MS);
+    sweepTimer.unref();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });

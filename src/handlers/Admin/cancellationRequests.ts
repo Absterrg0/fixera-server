@@ -13,6 +13,7 @@ import {
 } from "../../utils/emailService";
 import { getProfessionalDisplayName } from "../../utils/displayName";
 import { auditLog } from "../../utils/auditLogger";
+import { param, params } from "../../utils/requestParams";
 
 const VALID_STATUSES = ["pending", "processing", "negotiating", "escalated", "approved", "denied"] as const;
 const ADMIN_ACTIONABLE_STATUSES = ["pending", "escalated"];
@@ -64,7 +65,7 @@ export const listCancellationRequests = async (req: Request, res: Response) => {
 
 export const getCancellationRequest = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid id" });
     }
@@ -91,7 +92,7 @@ export const getCancellationRequest = async (req: Request, res: Response) => {
 
 export const approveCancellationRequest = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
     const adminId = adminIdRaw?.toString();
     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
@@ -294,7 +295,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
       req,
       action: 'admin.cancellation_requests.approve',
       targetType: 'CancellationRequest',
-      targetId: req.params.id,
+      targetId: param(req.params.id),
       status: 'failure',
       statusCode: 500,
       errorMessage: error?.message || 'unknown',
@@ -305,7 +306,7 @@ export const approveCancellationRequest = async (req: Request, res: Response) =>
 
 export const denyCancellationRequest = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = params(req.params);
     const adminIdRaw = (req as any).admin?._id ?? (req as any).user?._id;
     const adminId = adminIdRaw?.toString();
     const { denyReason } = req.body || {};
@@ -412,7 +413,7 @@ export const denyCancellationRequest = async (req: Request, res: Response) => {
       req,
       action: 'admin.cancellation_requests.deny',
       targetType: 'CancellationRequest',
-      targetId: req.params.id,
+      targetId: param(req.params.id),
       status: 'failure',
       statusCode: 500,
       errorMessage: error?.message || 'unknown',

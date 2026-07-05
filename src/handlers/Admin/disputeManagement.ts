@@ -20,6 +20,7 @@ import { auditLog } from '../../utils/auditLogger';
 import { getProfessionalDisplayName } from '../../utils/displayName';
 import { presignS3Url } from '../../utils/s3Upload';
 import { buildProjectScheduleWindow } from '../../utils/scheduleEngine';
+import { param, params } from '../../utils/requestParams';
 
 const presignAttachments = async (urls?: unknown): Promise<string[]> => {
   if (!Array.isArray(urls) || urls.length === 0) return [];
@@ -318,7 +319,7 @@ export const getDisputes = async (req: Request, res: Response) => {
 
 export const getDisputeDetails = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
 
     const booking = await Booking.findById(bookingId)
       .populate('customer', 'name email phone customerType')
@@ -359,7 +360,7 @@ export const getDisputeDetails = async (req: Request, res: Response) => {
 };
 
 export const resolveDispute = async (req: Request, res: Response) => {
-  const { bookingId } = req.params;
+  const { bookingId } = params(req.params);
   const adminUser = (req as any).user || (req as any).admin;
   const { action, adjustedAmount, resolution, forceStatus, resolutionAttachments, forcedStartDate, forcedStartTime } = req.body || {};
 
@@ -637,7 +638,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
         req,
         action: 'admin.disputes.resolve',
         targetType: 'Booking',
-        targetId: req.params.bookingId,
+        targetId: param(req.params.bookingId),
         status: 'failure',
         statusCode: 500,
         errorMessage: error?.message || 'unknown',

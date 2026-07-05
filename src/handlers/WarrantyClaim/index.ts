@@ -31,6 +31,7 @@ import {
   sendWarrantyProposalSentEmail,
 } from "../../utils/emailService";
 import { getProfessionalDisplayName } from "../../utils/displayName";
+import { params } from "../../utils/requestParams";
 
 const WARRANTY_ADMIN_NOTIFICATIONS_EMAIL = process.env.ADMIN_NOTIFICATIONS_EMAIL || process.env.FROM_EMAIL || '';
 
@@ -493,7 +494,7 @@ export const attachClaimEvidence = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
 
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Valid claimId is required" });
     }
@@ -564,7 +565,7 @@ export const deleteDraftClaim = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
 
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Valid claimId is required" });
     }
@@ -748,7 +749,7 @@ export const getWarrantyClaimByBooking = async (req: Request, res: Response) => 
     if (!userId) {
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
-    const { bookingId } = req.params;
+    const { bookingId } = params(req.params);
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, msg: "Invalid bookingId" });
     }
@@ -798,7 +799,7 @@ export const getWarrantyClaimById = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
     }
@@ -884,7 +885,7 @@ export const submitWarrantyProposal = async (req: Request, res: Response) => {
     if (!userId || getUserRole(req) !== "professional") {
       return res.status(403).json({ success: false, msg: "Only professionals can submit claim proposals" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { message, proposedScheduleAt, resolveByDate } = req.body as {
       message?: string;
       proposedScheduleAt?: string;
@@ -993,7 +994,7 @@ export const declineWarrantyClaim = async (req: Request, res: Response) => {
     if (!userId || getUserRole(req) !== "professional") {
       return res.status(403).json({ success: false, msg: "Only professionals can decline claims" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { reason } = req.body as { reason?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1055,7 +1056,7 @@ export const respondToWarrantyProposal = async (req: Request, res: Response) => 
     if (!userId || getUserRole(req) !== "customer") {
       return res.status(403).json({ success: false, msg: "Only customers can respond to proposals" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { action, note } = req.body as { action?: "accept" | "decline"; note?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1143,7 +1144,7 @@ export const markWarrantyResolved = async (req: Request, res: Response) => {
     if (!userId || getUserRole(req) !== "professional") {
       return res.status(403).json({ success: false, msg: "Only professionals can mark claims as resolved" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { summary, attachments } = req.body as { summary?: string; attachments?: string[] };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1225,7 +1226,7 @@ export const confirmWarrantyResolution = async (req: Request, res: Response) => 
     if (!userId || getUserRole(req) !== "customer") {
       return res.status(403).json({ success: false, msg: "Only customers can confirm resolution" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
     }
@@ -1285,7 +1286,7 @@ export const escalateWarrantyClaim = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ success: false, msg: "Authentication required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { reason, note } = req.body as { reason?: string; note?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1353,7 +1354,7 @@ export const adminCloseWarrantyClaim = async (req: Request, res: Response) => {
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { note } = req.body as { note?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1410,7 +1411,7 @@ export const adminApproveWarrantyClaim = async (req: Request, res: Response) => 
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { note } = req.body as { note?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1459,7 +1460,7 @@ export const adminDeclineWarrantyClaim = async (req: Request, res: Response) => 
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { reason } = req.body as { reason?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
@@ -1520,7 +1521,7 @@ export const adminApproveWarrantyResolve = async (req: Request, res: Response) =
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });
     }
@@ -1585,7 +1586,7 @@ export const adminAdjustWarrantyResolve = async (req: Request, res: Response) =>
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { resolveDescription, resolveByDate } = req.body as {
       resolveDescription?: string;
       resolveByDate?: string;
@@ -1681,7 +1682,7 @@ export const adminSetWarrantyStatus = async (req: Request, res: Response) => {
     if (!userId || !isAdmin(req)) {
       return res.status(403).json({ success: false, msg: "Admin access required" });
     }
-    const { claimId } = req.params;
+    const { claimId } = params(req.params);
     const { status, note } = req.body as { status?: string; note?: string };
     if (!claimId || !mongoose.Types.ObjectId.isValid(claimId)) {
       return res.status(400).json({ success: false, msg: "Invalid claimId" });

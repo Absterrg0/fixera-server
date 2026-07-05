@@ -9,6 +9,7 @@ import { generateFileName, uploadToS3, validateImageFile, validateFile, validate
 import type { IChatAttachment } from "../../models/chatMessage";
 import { sendPushToUser } from "../../utils/fcmService";
 import { getFrontendUrl } from "../../utils/frontendUrl";
+import { params } from "../../utils/requestParams";
 
 const toObjectId = (value: string) =>
   mongoose.Types.ObjectId.createFromHexString(value);
@@ -271,7 +272,7 @@ export const getConversationMessages = async (
   res: Response,
 ) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
   const before = typeof req.query.before === "string" ? req.query.before : undefined;
 
   if (!userId) {
@@ -381,7 +382,7 @@ export const getConversationMessages = async (
 export const sendMessage = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
   const userRole = req.user?.role;
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
   const rawText = typeof req.body.text === "string" ? req.body.text : "";
   const text = rawText.trim();
   const images = Array.isArray(req.body.images)
@@ -552,7 +553,7 @@ export const markConversationRead = async (
   res: Response,
 ) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
 
   if (!userId) {
     return res.status(401).json({ success: false, msg: "Authentication required" });
@@ -679,7 +680,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
 
 export const getConversationInfo = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
 
   if (!userId) {
     return res.status(401).json({ success: false, msg: "Authentication required" });
@@ -902,7 +903,7 @@ export const getConversationInfo = async (req: Request, res: Response) => {
 
 export const toggleStar = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
   if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
@@ -929,7 +930,7 @@ export const toggleStar = async (req: Request, res: Response) => {
 
 export const toggleArchive = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
   if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
@@ -956,7 +957,7 @@ export const toggleArchive = async (req: Request, res: Response) => {
 
 export const addLabel = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
   const { label, color } = req.body as { label?: string; color?: string };
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
@@ -1010,7 +1011,7 @@ export const addLabel = async (req: Request, res: Response) => {
 
 export const removeLabel = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId, label } = req.params;
+  const { conversationId, label } = params(req.params);
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
   if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
@@ -1024,7 +1025,7 @@ export const removeLabel = async (req: Request, res: Response) => {
   }
 
   await Conversation.findByIdAndUpdate(conversationId, {
-    $pull: { labels: { userId: toObjectId(userId), label: decodeURIComponent(label) } },
+    $pull: { labels: { userId: toObjectId(userId), label } },
   });
 
   return res.status(200).json({ success: true, msg: "Label removed" });
@@ -1032,7 +1033,7 @@ export const removeLabel = async (req: Request, res: Response) => {
 
 export const reportMessage = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { messageId } = req.params;
+  const { messageId } = params(req.params);
   const { reason, description } = req.body as { reason?: string; description?: string };
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
@@ -1078,7 +1079,7 @@ export const reportMessage = async (req: Request, res: Response) => {
 
 export const searchMessages = async (req: Request, res: Response) => {
   const userId = getRequestUserId(req);
-  const { conversationId } = req.params;
+  const { conversationId } = params(req.params);
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
 
   if (!userId) return res.status(401).json({ success: false, msg: "Authentication required" });
