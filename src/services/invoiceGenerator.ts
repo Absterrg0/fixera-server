@@ -159,10 +159,10 @@ export async function generateInvoiceNumber(): Promise<string> {
   const sequence = await InvoiceSequence.findOneAndUpdate(
     { year },
     {
-      $setOnInsert: { year, value: 0 },
+      $setOnInsert: { year },
       $inc: { value: 1 },
     },
-    { new: true, upsert: true }
+    { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 
   if (!sequence) {
@@ -177,10 +177,10 @@ export async function generateCreditNoteNumber(): Promise<string> {
   const sequence = await InvoiceSequence.findOneAndUpdate(
     { year },
     {
-      $setOnInsert: { year, value: 0 },
+      $setOnInsert: { year },
       $inc: { value: 1 },
     },
-    { new: true, upsert: true }
+    { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 
   if (!sequence) {
