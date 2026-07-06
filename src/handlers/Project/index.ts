@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Project from "../../models/project";
 import Booking from "../../models/booking";
 import ServiceCategory from "../../models/serviceCategory";
+import ServiceConfiguration from "../../models/serviceConfiguration";
 import User from "../../models/user";
 import ChatMessage from "../../models/chatMessage";
 import {
@@ -608,10 +609,26 @@ export const getPublishedProject = async (req: Request, res: Response) => {
       ? await computeProfessionalStats(professionalId.toString())
       : null;
 
+    const serviceConfigurationId = project.serviceConfigurationId;
+    const vatConfig = serviceConfigurationId
+      ? await ServiceConfiguration.findById(serviceConfigurationId)
+          .select("vatManagement.enabled vatManagement.rateRuleGroup vatManagement.reducedVatQuestions")
+          .lean()
+      : null;
     const serialized = serializePublicProject(project);
     res.json({
       success: true,
-      project: { ...serialized, professionalStats }
+      project: {
+        ...serialized,
+        vatManagement: vatConfig?.vatManagement?.enabled
+          ? {
+              enabled: true,
+              rateRuleGroup: vatConfig.vatManagement.rateRuleGroup,
+              reducedVatQuestions: vatConfig.vatManagement.reducedVatQuestions,
+            }
+          : undefined,
+        professionalStats,
+      }
     });
   } catch (error) {
     console.error('Error fetching published project:', error);

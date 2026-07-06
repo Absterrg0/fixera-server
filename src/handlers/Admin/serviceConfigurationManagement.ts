@@ -122,12 +122,67 @@ export const getServiceConfigurationById = async (req: Request, res: Response) =
 };
 
 /**
+ * Validate the vatManagement block: logic rules must reference field names
+ * that exist in the reduced VAT questions, and rates/countries must be sane.
+ * Returns an error message, or null when valid.
+ */
+const validateVatManagement = (vatManagement: any): string | null => {
+    if (!vatManagement || !vatManagement.enabled) return null;
+
+    const questions = Array.isArray(vatManagement.reducedVatQuestions)
+        ? vatManagement.reducedVatQuestions
+        : [];
+    const fieldNames = new Set<string>();
+    for (const question of questions) {
+        const fieldName = String(question?.fieldName || '').trim();
+        if (!fieldName || !String(question?.question || '').trim()) {
+            return 'Every reduced VAT question needs both a question text and a field name.';
+        }
+        if (fieldNames.has(fieldName)) {
+            return `Duplicate VAT question field name "${fieldName}".`;
+        }
+        fieldNames.add(fieldName);
+        if (question.answerType === 'checkboxes' && (!Array.isArray(question.options) || question.options.length === 0)) {
+            return `Checkbox question "${fieldName}" needs at least one option.`;
+        }
+    }
+
+    const rules = Array.isArray(vatManagement.logicRules) ? vatManagement.logicRules : [];
+    for (const rule of rules) {
+        if (!String(rule?.country || '').trim()) {
+            return 'Every VAT logic rule needs a country.';
+        }
+        const standardRate = Number(rule?.standardRate);
+        const reducedRate = Number(rule?.reducedRate);
+        if (!Number.isFinite(standardRate) || standardRate < 0 || standardRate > 100) {
+            return `VAT rule for ${rule.country} has an invalid standard rate.`;
+        }
+        if (!Number.isFinite(reducedRate) || reducedRate < 0 || reducedRate > 100) {
+            return `VAT rule for ${rule.country} has an invalid reduced rate.`;
+        }
+        for (const condition of Array.isArray(rule?.conditions) ? rule.conditions : []) {
+            const conditionField = String(condition?.fieldName || '').trim();
+            if (!conditionField || !fieldNames.has(conditionField)) {
+                return `VAT rule condition references unknown field "${conditionField || '(empty)'}". Define it as a reduced VAT question first.`;
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
  * Create a new service configuration
  * @route POST /api/admin/service-configurations
  */
 export const createServiceConfiguration = async (req: Request, res: Response) => {
     try {
         const configurationData = req.body;
+
+        const vatError = validateVatManagement(configurationData?.vatManagement);
+        if (vatError) {
+            return res.status(400).json({ success: false, message: vatError });
+        }
 
         // Check if configuration already exists
         const existing = await ServiceConfiguration.findOne({
@@ -167,6 +222,13 @@ export const updateServiceConfiguration = async (req: Request, res: Response) =>
     try {
         const { id } = req.params;
         const updateData = req.body;
+
+        if (updateData?.vatManagement !== undefined) {
+            const vatError = validateVatManagement(updateData.vatManagement);
+            if (vatError) {
+                return res.status(400).json({ success: false, message: vatError });
+            }
+        }
 
         const configuration = await ServiceConfiguration.findByIdAndUpdate(
             id,

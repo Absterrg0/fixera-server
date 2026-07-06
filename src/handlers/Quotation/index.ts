@@ -14,6 +14,7 @@ import PlatformSettings from '../../models/platformSettings';
 import { addWorkingDays } from '../../utils/workingDays';
 import { getNextSequence } from '../../utils/counterSequence';
 import { createPaymentIntent } from '../Stripe/payment';
+import { getVatRateOptionsFromConfig, resolveVatDecisionFromConfig } from '../../utils/vatManagement';
 import {
   sendRfqAcceptedEmail,
   sendRfqRejectedEmail,
@@ -34,6 +35,144 @@ const getSafeCommissionPercent = async (): Promise<number> => {
     console.error('Failed to load platform settings for quotation commission:', error);
     return 0;
   }
+};
+
+const getVatAnswersFromBooking = (booking: any): Record<string, unknown> => {
+  const stored = booking.vatDecision?.answers;
+  if (Array.isArray(stored)) {
+    return stored.reduce((acc: Record<string, unknown>, entry: { fieldName?: string; value?: unknown }) => {
+      if (entry?.fieldName) acc[entry.fieldName] = entry.value;
+      return acc;
+    }, {});
+  }
+  return {};
+};
+
+const getAllowedVatOptionsForBooking = async (booking: any) => {
+  const customer = booking.customer as any;
+  const project = booking.project as any;
+  const country = booking.vatDecision?.country
+    || customer?.location?.country
+    || project?.distance?.countryCode
+    || 'BE';
+
+  return getVatRateOptionsFromConfig({
+    serviceConfigurationId: project?.serviceConfigurationId?.toString(),
+    category: project?.category,
+    service: project?.service,
+    areaOfWork: project?.areaOfWork,
+    country,
+    customerType: customer?.customerType || 'individual',
+    vatNumber: customer?.vatNumber,
+    isVatVerified: customer?.isVatVerified,
+    answers: getVatAnswersFromBooking(booking),
+  });
+};
+
+const validatePricingLinesAgainstAllowedVat = async (booking: any, lines: Array<{ vatRate: number }>) => {
+  const options = await getAllowedVatOptionsForBooking(booking);
+  const allowedRates = new Set(options.map(option => Number(option.rate)));
+  const invalidLine = lines.find(line => !allowedRates.has(Number(line.vatRate)));
+  if (invalidLine) {
+    return {
+      valid: false,
+      message: `VAT rate ${invalidLine.vatRate}% is not available for this booking. Allowed rates: ${options.map(option => `${option.rate}%`).join(', ') || 'none'}.`,
+    };
+  }
+  return { valid: true };
+};
+
+export const getQuotationVatRateOptions = async (req: Request, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = (req as any).user?._id?.toString();
+
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
+    const booking = await Booking.findById(bookingId)
+      .populate('customer', 'customerType location vatNumber isVatVerified businessName')
+      .populate('professional', '_id')
+      .populate('project', 'serviceConfigurationId category service areaOfWork distance');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } });
+    }
+
+    const professionalId = (booking.professional as any)?._id || booking.professional;
+    if (professionalId?.toString() !== userId) {
+      return res.status(403).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Only the assigned professional can view VAT options' } });
+    }
+
+    const customer = booking.customer as any;
+    const project = booking.project as any;
+    const country = booking.vatDecision?.country
+      || customer?.location?.country
+      || project?.distance?.countryCode
+      || 'BE';
+
+    const options = await getAllowedVatOptionsForBooking(booking);
+
+    return res.json({
+      success: true,
+      data: {
+        country,
+        customerType: customer?.customerType || 'individual',
+        options,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error loading quotation VAT rate options:', error);
+    return res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Failed to load VAT options' } });
+  }
+};
+
+const normalizePricingLines = (
+  pricingLines: unknown,
+  fallbackAmount: unknown,
+  fallbackDescription: unknown,
+  fallbackCountry?: string,
+) => {
+  if (Array.isArray(pricingLines) && pricingLines.length > 0) {
+    const lines = pricingLines.map((line: any) => ({
+      description: String(line?.description || '').trim(),
+      price: Number(line?.price),
+      vatRate: Number(line?.vatRate),
+      vatCountry: line?.vatCountry ? String(line.vatCountry).trim().toUpperCase() : fallbackCountry,
+      vatLabel: line?.vatLabel ? String(line.vatLabel).trim() : undefined,
+    }));
+
+    const invalidLine = lines.find(line =>
+      !line.description ||
+      !Number.isFinite(line.price) ||
+      line.price < 0 ||
+      !Number.isFinite(line.vatRate) ||
+      line.vatRate < 0 ||
+      line.vatRate > 100
+    );
+
+    if (invalidLine) {
+      return { error: 'Each pricing line needs a description, non-negative price, and VAT rate between 0 and 100.' };
+    }
+
+    const totalAmount = Math.round(lines.reduce((sum, line) => sum + line.price, 0) * 100) / 100;
+    return { lines, totalAmount };
+  }
+
+  const amount = Number(fallbackAmount);
+  return {
+    lines: Number.isFinite(amount) && amount > 0
+      ? [{
+          description: String(fallbackDescription || 'Service').slice(0, 500),
+          price: amount,
+          vatRate: 0,
+          vatCountry: fallbackCountry,
+          vatLabel: 'VAT selected at checkout',
+        }]
+      : [],
+    totalAmount: amount,
+  };
 };
 
 const formatQuotationValidDate = (validUntil: string): string => {
@@ -271,6 +410,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
       materials,
       description,
       totalAmount,
+      pricingLines,
       currency,
       milestones,
       preparationDuration,
@@ -287,7 +427,13 @@ export const submitQuotation = async (req: Request, res: Response) => {
     if (!description) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Description is required' } });
     }
-    if (!totalAmount || totalAmount <= 0) {
+    const normalizedPricing = normalizePricingLines(pricingLines, totalAmount, description);
+    if (normalizedPricing.error) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: normalizedPricing.error } });
+    }
+    const normalizedTotalAmount = normalizedPricing.totalAmount || 0;
+
+    if (!normalizedTotalAmount || normalizedTotalAmount <= 0) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Total amount must be greater than 0' } });
     }
     if (!warrantyDuration?.value || !warrantyDuration?.unit) {
@@ -309,7 +455,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
     // Validate milestones sum if provided
     if (milestones && milestones.length > 0) {
       const milestoneSum = milestones.reduce((sum: number, m: any) => sum + (m.amount || 0), 0);
-      if (Math.abs(milestoneSum - totalAmount) > 0.01) {
+      if (Math.abs(milestoneSum - normalizedTotalAmount) > 0.01) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Sum of milestone amounts must equal total amount' } });
       }
     }
@@ -330,6 +476,11 @@ export const submitQuotation = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be submitted when status is rfq_accepted or draft_quote' } });
     }
 
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    if (!vatValidation.valid) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
+    }
+
     const now = new Date();
     const versionNumber = 1;
 
@@ -340,7 +491,8 @@ export const submitQuotation = async (req: Request, res: Response) => {
       materialsIncluded,
       materials: materialsIncluded ? materials : [],
       description,
-      totalAmount,
+      pricingLines: normalizedPricing.lines,
+      totalAmount: normalizedTotalAmount,
       currency: currency || 'EUR',
       milestones: milestones ? milestones.map((m: any, i: number): IQuotationMilestone => ({
         title: m.title,
@@ -381,7 +533,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
 
     try {
       const commissionPercent = await getSafeCommissionPercent();
-      const customerAmount = +(totalAmount * (1 + commissionPercent / 100)).toFixed(2);
+      const customerAmount = +(normalizedTotalAmount * (1 + commissionPercent / 100)).toFixed(2);
       const profDisplayName = getProfessionalDisplayName(professional);
       const isDirect = booking.rfqResponse === undefined || booking.rfqResponse === null;
       if (isDirect) {
@@ -393,7 +545,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
       console.error('Failed to send quotation email:', e);
     }
 
-    await sendQuotationChatMessage(booking, versionNumber, scope, totalAmount, currency || 'EUR', validUntil, false);
+    await sendQuotationChatMessage(booking, versionNumber, scope, normalizedTotalAmount, currency || 'EUR', validUntil, false);
 
     return res.json({
       success: true,
@@ -429,6 +581,7 @@ export const editQuotation = async (req: Request, res: Response) => {
       materials,
       description,
       totalAmount,
+      pricingLines,
       currency,
       milestones,
       preparationDuration,
@@ -445,7 +598,13 @@ export const editQuotation = async (req: Request, res: Response) => {
     if (!description) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Description is required' } });
     }
-    if (!totalAmount || totalAmount <= 0) {
+    const normalizedPricing = normalizePricingLines(pricingLines, totalAmount, description);
+    if (normalizedPricing.error) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: normalizedPricing.error } });
+    }
+    const normalizedTotalAmount = normalizedPricing.totalAmount || 0;
+
+    if (!normalizedTotalAmount || normalizedTotalAmount <= 0) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Total amount must be greater than 0' } });
     }
     if (!changeNote) {
@@ -457,7 +616,7 @@ export const editQuotation = async (req: Request, res: Response) => {
 
     if (milestones && milestones.length > 0) {
       const milestoneSum = milestones.reduce((sum: number, m: any) => sum + (m.amount || 0), 0);
-      if (Math.abs(milestoneSum - totalAmount) > 0.01) {
+      if (Math.abs(milestoneSum - normalizedTotalAmount) > 0.01) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Sum of milestone amounts must equal total amount' } });
       }
     }
@@ -478,6 +637,11 @@ export const editQuotation = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be edited when status is quoted or quote_rejected' } });
     }
 
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    if (!vatValidation.valid) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
+    }
+
     const now = new Date();
     const newVersionNumber = (booking.quoteVersions?.length || 0) + 1;
 
@@ -489,7 +653,8 @@ export const editQuotation = async (req: Request, res: Response) => {
       materialsIncluded,
       materials: materialsIncluded ? materials : [],
       description,
-      totalAmount,
+      pricingLines: normalizedPricing.lines,
+      totalAmount: normalizedTotalAmount,
       currency: currency || 'EUR',
       milestones: milestones ? milestones.map((m: any, i: number): IQuotationMilestone => ({
         title: m.title,
@@ -530,7 +695,7 @@ export const editQuotation = async (req: Request, res: Response) => {
       console.error('Failed to send quotation updated email:', e);
     }
 
-    await sendQuotationChatMessage(booking, newVersionNumber, scope, totalAmount, currency || 'EUR', validUntil, true);
+    await sendQuotationChatMessage(booking, newVersionNumber, scope, normalizedTotalAmount, currency || 'EUR', validUntil, true);
 
     return res.json({
       success: true,
@@ -712,7 +877,7 @@ export const createDirectQuotation = async (req: Request, res: Response) => {
     }
     if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
       const { default: Project } = await import('../../models/project');
-      linkedProject = await Project.findById(projectId).select('title subprojects professionalId status');
+      linkedProject = await Project.findById(projectId).select('title subprojects professionalId status services category service areaOfWork serviceConfigurationId');
       if (!linkedProject) {
         return res.status(400).json({ success: false, error: { code: 'INVALID_PROJECT', message: 'Project not found' } });
       }
@@ -745,6 +910,23 @@ export const createDirectQuotation = async (req: Request, res: Response) => {
       ? resolveLinkedSubprojectIndex(linkedProject, selectedSubprojectIndex)
       : undefined;
 
+    // Resolve the VAT decision up front so quotation VAT rate options and
+    // checkout use the correct country/B2B rules for this customer.
+    const linkedProjectService = Array.isArray(linkedProject?.services) && linkedProject.services.length > 0
+      ? linkedProject.services[0]
+      : null;
+    const vatDecision = await resolveVatDecisionFromConfig({
+      serviceConfigurationId: linkedProject?.serviceConfigurationId?.toString(),
+      category: linkedProjectService?.category || linkedProject?.category,
+      service: linkedProjectService?.service || linkedProject?.service,
+      areaOfWork: linkedProjectService?.areaOfWork || linkedProject?.areaOfWork,
+      country: customer.location?.country,
+      answers: {},
+      customerType: customer.customerType || 'individual',
+      vatNumber: customer.vatNumber,
+      isVatVerified: customer.isVatVerified,
+    });
+
     const bookingData: any = {
       customer: customerId,
       professional: userId,
@@ -754,6 +936,7 @@ export const createDirectQuotation = async (req: Request, res: Response) => {
       ...(typeof resolvedSubprojectIndex === 'number'
         ? { selectedSubprojectIndex: resolvedSubprojectIndex }
         : {}),
+      vatDecision: { ...vatDecision, answers: [] },
       location: {
         type: 'Point',
         coordinates: customer.location.coordinates,

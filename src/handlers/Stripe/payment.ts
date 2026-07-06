@@ -23,11 +23,14 @@ import {
   computeGrossBookingAmount,
 } from '../../utils/payment';
 import { calculateVAT } from '../../utils/vat';
+import { calculateVatFromPricingLines } from '../../utils/vatLineCalculation';
+import { requiresVatRfqReview } from '../../utils/vatManagement';
 import PlatformSettings from '../../models/platformSettings';
 import { calculateAutoDiscount } from '../../utils/discountEngine';
 // deductPoints moved to webhook handler (handlePaymentIntentSucceeded)
 import { calculateDiscountedPayouts } from '../../utils/discountEngine';
 import { auditLog } from '../../utils/auditLogger';
+import { ensureBookingInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const extractParticipantIds = (booking: any, professionalOverride?: any) => {
   const customerId = (booking.customer as any)?._id || booking.customer;
@@ -43,6 +46,8 @@ const ALLOWED_PAYMENT_OVERRIDE_KEYS = new Set([
   'vatAmount',
   'vatRate',
   'totalWithVat',
+  'reverseCharge',
+  'vatBreakdown',
   'platformCommission',
   'professionalPayout',
   'stripePaymentIntentId',
@@ -56,7 +61,11 @@ const ALLOWED_PAYMENT_OVERRIDE_KEYS = new Set([
   'canceledAt',
   'invoiceNumber',
   'invoiceUrl',
+  'invoiceUblUrl',
   'invoiceGeneratedAt',
+  'peppolDispatchStatus',
+  'peppolDispatchReference',
+  'peppolDispatchedAt',
   'metadata',
   'notes',
   'refundReason',
@@ -92,10 +101,29 @@ const buildPaymentUpsertBase = (booking: any, overrides: Record<string, any> = {
     vatAmount: paymentSummary.vatAmount,
     vatRate: paymentSummary.vatRate,
     totalWithVat: paymentSummary.totalWithVat || amount,
+    reverseCharge: paymentSummary.reverseCharge,
+    vatBreakdown: paymentSummary.vatBreakdown,
     platformCommission: paymentSummary.platformCommission,
     professionalPayout: paymentSummary.professionalPayout,
+    invoiceNumber: paymentSummary.invoiceNumber,
+    invoiceUrl: paymentSummary.invoiceUrl,
+    invoiceUblUrl: paymentSummary.invoiceUblUrl,
+    invoiceGeneratedAt: paymentSummary.invoiceGeneratedAt,
+    peppolDispatchStatus: paymentSummary.peppolDispatchStatus,
+    peppolDispatchReference: paymentSummary.peppolDispatchReference,
+    peppolDispatchedAt: paymentSummary.peppolDispatchedAt,
     ...filterPaymentOverrides(overrides),
   };
+};
+
+const getQuotePricingVatCalculation = (booking: any, amount: number) => {
+  const quoteVersions = Array.isArray(booking.quoteVersions) ? booking.quoteVersions : [];
+  const currentVersion = quoteVersions.find((version: any) => version.version === booking.currentQuoteVersion)
+    || quoteVersions[quoteVersions.length - 1];
+  const pricingLines = Array.isArray(currentVersion?.pricingLines)
+    ? currentVersion.pricingLines
+    : [];
+  return calculateVatFromPricingLines(pricingLines, amount);
 };
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
@@ -401,14 +429,30 @@ export const createPaymentIntent = async (
     // Use discounted amount for VAT and payment calculations
     const discountedQuoteAmount = discountBreakdown.finalAmount;
 
-    // Calculate VAT on the discounted amount
-    const vatCalculation = calculateVAT({
-      amount: discountedQuoteAmount,
-      customerCountry: customer.location?.country || 'BE',
-      customerVATNumber: customer.vatNumber || null,
-      professionalCountry: professional.businessInfo?.country || 'BE',
-      customerType: customer.customerType || 'individual',
-    });
+    // Calculate VAT on the discounted amount. Prefer the booking's service-level VAT
+    // decision when the booking wizard already evaluated a configured rule.
+    const configuredVatDecision = (booking as any).vatDecision;
+    const quotePricingVatCalculation = getQuotePricingVatCalculation(booking, discountedQuoteAmount);
+    const vatCalculation = quotePricingVatCalculation
+      ? quotePricingVatCalculation
+      : configuredVatDecision && !requiresVatRfqReview(configuredVatDecision)
+        ? (() => {
+            const vatRate = Number(configuredVatDecision.appliedRate) || 0;
+            const vatAmount = Math.round(((discountedQuoteAmount * vatRate) / 100) * 100) / 100;
+            return {
+              vatRate,
+              vatAmount,
+              total: Math.round((discountedQuoteAmount + vatAmount) * 100) / 100,
+              reverseCharge: Boolean(configuredVatDecision.reverseCharge),
+            };
+          })()
+        : calculateVAT({
+          amount: discountedQuoteAmount,
+          customerCountry: customer.location?.country || 'BE',
+          customerVATNumber: customer.isVatVerified ? customer.vatNumber || null : null,
+          professionalCountry: professional.businessInfo?.country || 'BE',
+          customerType: customer.customerType || 'individual',
+        });
 
     // Calculate amounts
     const netAmount = discountedQuoteAmount;
@@ -468,6 +512,8 @@ export const createPaymentIntent = async (
       vatAmount,
       vatRate: vatCalculation.vatRate,
       totalWithVat: totalAmount,
+      reverseCharge: vatCalculation.reverseCharge,
+      vatBreakdown: (vatCalculation as any).vatBreakdown,
       ...(milestoneIndex !== null && { milestoneIndex }),
       ...(discountBreakdown.totalDiscount > 0 && {
         discount: {
@@ -510,6 +556,8 @@ export const createPaymentIntent = async (
           vatAmount,
           vatRate: vatCalculation.vatRate,
           totalWithVat: totalAmount,
+          reverseCharge: vatCalculation.reverseCharge,
+          vatBreakdown: (vatCalculation as any).vatBreakdown,
           platformCommission,
           professionalPayout,
           stripePaymentIntentId: paymentIntent.id,
@@ -663,6 +711,26 @@ export const confirmPayment = async (req: Request, res: Response) => {
           capturedAt: booking.payment!.capturedAt || new Date(),
         })
       );
+
+      try {
+        const invoiceArtifacts = await ensureBookingInvoiceArtifacts(booking._id.toString());
+        if (invoiceArtifacts) {
+          booking.payment = {
+            ...booking.payment,
+            invoiceNumber: invoiceArtifacts.invoiceNumber,
+            invoiceUrl: invoiceArtifacts.invoiceUrl,
+            invoiceUblUrl: invoiceArtifacts.invoiceUblUrl,
+            invoiceGeneratedAt: invoiceArtifacts.invoiceGeneratedAt,
+            peppolDispatchStatus: invoiceArtifacts.peppolDispatchStatus,
+            peppolDispatchReference: invoiceArtifacts.peppolDispatchReference,
+          } as any;
+        }
+      } catch (invoiceError: any) {
+        console.error(
+          `[PAYMENT CONFIRM] Payment authorized for booking ${booking._id}, but invoice generation failed:`,
+          invoiceError?.message || invoiceError
+        );
+      }
 
       console.log(`✅ Payment authorized for booking ${booking._id}`);
 

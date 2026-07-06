@@ -42,6 +42,40 @@ export interface IConditionWarning {
     type: 'condition' | 'warning';
 }
 
+export interface IVatQuestion {
+    question: string;
+    fieldName: string;
+    answerType: 'number' | 'yes_no' | 'checkboxes';
+    unit?: string;
+    options?: string[];
+    isRequired: boolean;
+}
+
+export interface IVatLogicCondition {
+    fieldName: string;
+    operator: 'equals' | 'not_equals' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'includes';
+    value: string | number | boolean;
+    connector?: 'AND' | 'OR';
+}
+
+export interface IVatLogicRule {
+    country: string;
+    standardRate: number;
+    reducedRate: number;
+    conditions: IVatLogicCondition[];
+    action: 'reduced_rate' | 'rfq';
+    customText?: string;
+    priority: number;
+    isActive: boolean;
+}
+
+export interface IVatManagement {
+    enabled: boolean;
+    rateRuleGroup?: string;
+    reducedVatQuestions: IVatQuestion[];
+    logicRules: IVatLogicRule[];
+}
+
 // Main service configuration interface
 export interface IServiceConfiguration extends Document {
     // Core identifiers (NOT configurable by admin)
@@ -70,6 +104,9 @@ export interface IServiceConfiguration extends Document {
 
     // Conditions and warnings
     conditionsAndWarnings: IConditionWarning[];
+
+    // VAT management
+    vatManagement?: IVatManagement;
 
     // Metadata
     isActive: boolean;
@@ -140,6 +177,48 @@ const ConditionWarningSchema = new Schema<IConditionWarning>({
     type: { type: String, enum: ['condition', 'warning'], required: true }
 }, { _id: false });
 
+const VatQuestionSchema = new Schema<IVatQuestion>({
+    question: { type: String, required: true, trim: true },
+    fieldName: { type: String, required: true, trim: true },
+    answerType: {
+        type: String,
+        enum: ['number', 'yes_no', 'checkboxes'],
+        required: true
+    },
+    unit: { type: String, trim: true },
+    options: [{ type: String }],
+    isRequired: { type: Boolean, default: true }
+}, { _id: false });
+
+const VatLogicConditionSchema = new Schema<IVatLogicCondition>({
+    fieldName: { type: String, required: true, trim: true },
+    operator: {
+        type: String,
+        enum: ['equals', 'not_equals', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'includes'],
+        required: true
+    },
+    value: { type: Schema.Types.Mixed, required: true },
+    connector: { type: String, enum: ['AND', 'OR'], default: 'AND' }
+}, { _id: false });
+
+const VatLogicRuleSchema = new Schema<IVatLogicRule>({
+    country: { type: String, required: true, trim: true },
+    standardRate: { type: Number, required: true, min: 0, max: 100 },
+    reducedRate: { type: Number, required: true, min: 0, max: 100 },
+    conditions: { type: [VatLogicConditionSchema], default: [] },
+    action: { type: String, enum: ['reduced_rate', 'rfq'], required: true },
+    customText: { type: String, trim: true },
+    priority: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true }
+}, { _id: false });
+
+const VatManagementSchema = new Schema<IVatManagement>({
+    enabled: { type: Boolean, default: false },
+    rateRuleGroup: { type: String, trim: true },
+    reducedVatQuestions: { type: [VatQuestionSchema], default: [] },
+    logicRules: { type: [VatLogicRuleSchema], default: [] }
+}, { _id: false });
+
 // Main Service Configuration Schema
 const ServiceConfigurationSchema = new Schema<IServiceConfiguration>({
     // Core identifiers
@@ -160,6 +239,7 @@ const ServiceConfigurationSchema = new Schema<IServiceConfiguration>({
     professionalInputFields: [DynamicFieldSchema],
     extraOptions: [ExtraOptionSchema],
     conditionsAndWarnings: [ConditionWarningSchema],
+    vatManagement: { type: VatManagementSchema, default: () => ({ enabled: false, reducedVatQuestions: [], logicRules: [] }) },
 
     // Metadata
     isActive: { type: Boolean, default: true },

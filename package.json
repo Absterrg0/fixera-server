@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "dev": "nodemon --exec \"npx tsx src/index.ts\"",
     "build": "tsc",
     "start": "node dist/index.js",
@@ -59,6 +59,7 @@
     "@types/pdfkit": "^0.17.3",
     "nodemon": "^3.1.10",
     "tsx": "^4.20.4",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.10"
   }
 }

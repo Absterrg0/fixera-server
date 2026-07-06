@@ -17,6 +17,7 @@ import { addBusinessDays, REFUND_RESPONSE_BUSINESS_DAYS } from "../../utils/busi
 import { sendPushToUser } from "../../utils/fcmService";
 import { getFrontendUrl } from "../../utils/frontendUrl";
 import { IUser } from "../../models/user";
+import { applyB2BInvoiceRule, requiresVatRfqReview, resolveVatDecisionFromConfig } from "../../utils/vatManagement";
 
 const presignMaybeS3Url = async (url?: string | null) => {
   if (!url) return url;
@@ -124,6 +125,8 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
       estimatedUsage,
       selectedExtraOptions,
       paymentAtCheckout,
+      serviceConfigurationId,
+      vatAnswers,
     } = req.body;
     const paymentAtCheckoutRequested =
       paymentAtCheckout === true ||
@@ -215,6 +218,16 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
       }
     };
 
+    const normalizedVatAnswers = Array.isArray(vatAnswers)
+      ? vatAnswers.reduce((acc: Record<string, unknown>, answer: any) => {
+          if (answer?.fieldName) acc[String(answer.fieldName)] = answer.value;
+          return acc;
+        }, {})
+      : normalizeRfqAnswers(rfqData.answers).reduce((acc: Record<string, unknown>, answer: any) => {
+          if (answer.questionId) acc[answer.questionId] = answer.answer;
+          return acc;
+        }, {});
+
     if (customerBlocks) {
       bookingData.customerBlocks = customerBlocks;
     }
@@ -237,6 +250,21 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
       }
 
       bookingData.professional = professionalId;
+
+      // Professional bookings have no project-level service configuration, but
+      // country-based standard rates and B2B reverse-charge rules still apply.
+      const vatDecision = await resolveVatDecisionFromConfig({
+        serviceConfigurationId,
+        country: customer.location?.country,
+        answers: normalizedVatAnswers,
+        customerType: customer.customerType || "individual",
+        vatNumber: customer.vatNumber,
+        isVatVerified: customer.isVatVerified,
+      });
+      bookingData.vatDecision = {
+        ...vatDecision,
+        answers: Object.entries(normalizedVatAnswers).map(([fieldName, value]) => ({ fieldName, value })),
+      };
     } else {
       const project = await Project.findById(projectId);
       if (!project) {
@@ -276,6 +304,26 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
 
       bookingData.project = projectId;
       bookingData.professional = project.professionalId;
+
+      const projectService = Array.isArray(project.services) && project.services.length > 0
+        ? project.services[0]
+        : null;
+      const selectedServiceConfigId = serviceConfigurationId || project.serviceConfigurationId;
+      const vatDecision = await resolveVatDecisionFromConfig({
+        serviceConfigurationId: selectedServiceConfigId,
+        category: projectService?.category || project.category,
+        service: projectService?.service || project.service,
+        areaOfWork: projectService?.areaOfWork || project.areaOfWork,
+        country: customer.location?.country || project.distance?.countryCode,
+        answers: normalizedVatAnswers,
+        customerType: customer.customerType || "individual",
+        vatNumber: customer.vatNumber,
+        isVatVerified: customer.isVatVerified,
+      });
+      bookingData.vatDecision = {
+        ...vatDecision,
+        answers: Object.entries(normalizedVatAnswers).map(([fieldName, value]) => ({ fieldName, value })),
+      };
 
       let fallbackTeamMembers: mongoose.Types.ObjectId[] | null = null;
       let normalizedProjectResourceIds: string[] = [];
@@ -456,7 +504,8 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
         }
       }
 
-      const wantsPaymentAtCheckout = paymentAtCheckoutRequested;
+      const wantsPaymentAtCheckout =
+        paymentAtCheckoutRequested && !requiresVatRfqReview(bookingData.vatDecision);
       if (wantsPaymentAtCheckout) {
         if (
           typeof subprojectIndex !== "number" ||
@@ -1541,3 +1590,175 @@ export const getMyPayments = async (req: Request, res: Response, next: NextFunct
   }
 };
 
+/**
+ * Preview the VAT decision for the current customer before a booking is
+ * created, so the booking wizard can show the anticipated rate and outcome.
+ */
+export const previewVatDecision = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    const { projectId, serviceConfigurationId, vatAnswers } = req.body;
+
+    const customer = await User.findById(userId).select(
+      "role customerType vatNumber isVatVerified location"
+    );
+    if (!customer || customer.role !== "customer") {
+      return res.status(403).json({ success: false, msg: "Only customers can preview VAT" });
+    }
+
+    const normalizedVatAnswers = Array.isArray(vatAnswers)
+      ? vatAnswers.reduce((acc: Record<string, unknown>, answer: any) => {
+          if (answer?.fieldName) acc[String(answer.fieldName)] = answer.value;
+          return acc;
+        }, {})
+      : {};
+
+    let project: any = null;
+    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+      project = await Project.findById(projectId).select(
+        "services category service areaOfWork serviceConfigurationId distance"
+      );
+    }
+    const projectService = Array.isArray(project?.services) && project.services.length > 0
+      ? project.services[0]
+      : null;
+
+    const decision = await resolveVatDecisionFromConfig({
+      serviceConfigurationId: serviceConfigurationId || project?.serviceConfigurationId,
+      category: projectService?.category || project?.category,
+      service: projectService?.service || project?.service,
+      areaOfWork: projectService?.areaOfWork || project?.areaOfWork,
+      country: customer.location?.country || project?.distance?.countryCode,
+      answers: normalizedVatAnswers,
+      customerType: customer.customerType || "individual",
+      vatNumber: customer.vatNumber,
+      isVatVerified: customer.isVatVerified,
+    });
+
+    return res.json({ success: true, data: decision });
+  } catch (error) {
+    console.error("Error previewing VAT decision:", error);
+    return res.status(500).json({ success: false, msg: "Failed to preview VAT" });
+  }
+};
+
+export const proceedAtStandardVatRate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?._id?.toString();
+    const { bookingId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, msg: "Unauthorized" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId as string)) {
+      return res.status(400).json({ success: false, msg: "Invalid booking ID" });
+    }
+
+    const booking = await Booking.findById(bookingId)
+      .populate("customer", "customerType vatNumber isVatVerified")
+      .populate("project", "title subprojects extraOptions");
+    if (!booking) {
+      return res.status(404).json({ success: false, msg: "Booking not found" });
+    }
+
+    if (booking.customer._id.toString() !== userId) {
+      return res.status(403).json({ success: false, msg: "Only the customer can update VAT preference" });
+    }
+
+    if (booking.vatDecision?.action !== "rfq") {
+      return res.status(400).json({
+        success: false,
+        msg: "Standard-rate override is only available when VAT review is required",
+      });
+    }
+
+    if (booking.vatDecision.reverseCharge) {
+      return res.status(400).json({
+        success: false,
+        msg: "Standard-rate override is not available because this booking already qualifies for reverse-charge VAT.",
+      });
+    }
+
+    const standardRate = Number.isFinite(booking.vatDecision.standardRate)
+      ? booking.vatDecision.standardRate!
+      : booking.vatDecision.appliedRate ?? 21;
+
+    const customer = booking.customer as any;
+    booking.vatDecision = applyB2BInvoiceRule({
+      ...booking.vatDecision,
+      action: "standard_rate",
+      appliedRate: standardRate,
+      reverseCharge: false,
+      explanation: `Customer chose to proceed at the standard VAT rate (${standardRate}%).`,
+      matchedRuleText: undefined,
+    }, customer?.customerType, customer?.vatNumber, customer?.isVatVerified);
+
+    const project = booking.project as any;
+    const subprojectIndex = booking.selectedSubprojectIndex;
+    const selectedSubproject =
+      typeof subprojectIndex === "number" &&
+      Array.isArray(project?.subprojects) &&
+      subprojectIndex >= 0 &&
+      subprojectIndex < project.subprojects.length
+        ? project.subprojects[subprojectIndex]
+        : undefined;
+
+    if (
+      selectedSubproject &&
+      selectedSubproject.pricing?.type !== "rfq" &&
+      Number.isFinite(Number(selectedSubproject.pricing?.amount))
+    ) {
+      const baseAmount = Number(selectedSubproject.pricing.amount);
+      const selectedOptions = Array.isArray(booking.selectedExtraOptions) ? booking.selectedExtraOptions : [];
+      const extraOptionsTotal = selectedOptions.reduce((sum: number, selected: any) => {
+        const configuredOption = (project.extraOptions || []).find((option: any) =>
+          option?._id?.toString?.() === selected.extraOptionId?.toString?.()
+        );
+        return sum + Number(selected.bookedPrice ?? configuredOption?.price ?? 0);
+      }, 0);
+      const amount = Math.round((baseAmount + extraOptionsTotal + Number.EPSILON) * 100) / 100;
+
+      if (amount > 0) {
+        booking.quote = {
+          amount,
+          currency: booking.quote?.currency || "EUR",
+          description: `Auto-generated checkout quote for ${project.title || "service"}`,
+          breakdown: [
+            {
+              item: "Package Base",
+              quantity: 1,
+              unitPrice: baseAmount,
+              totalPrice: baseAmount,
+            },
+            ...selectedOptions.map((option: any) => ({
+              item: "Extra Option",
+              quantity: 1,
+              unitPrice: Number(option.bookedPrice || 0),
+              totalPrice: Number(option.bookedPrice || 0),
+            })),
+          ],
+          submittedAt: new Date(),
+          submittedBy: booking.professional,
+        } as any;
+        booking.status = "quote_accepted";
+        booking.statusHistory.push({
+          status: "quote_accepted",
+          timestamp: new Date(),
+          updatedBy: booking.customer,
+          note: "Customer chose standard VAT rate and restored fixed-price checkout",
+        });
+      }
+    }
+    await booking.save();
+
+    return res.status(200).json({
+      success: true,
+      msg: "Booking updated to standard VAT rate",
+      booking,
+    });
+  } catch (error: any) {
+    console.error("Proceed at standard VAT rate error:", error);
+    next(error);
+  }
+};

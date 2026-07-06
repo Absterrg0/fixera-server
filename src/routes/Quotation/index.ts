@@ -7,6 +7,7 @@ import {
   createDirectQuotation,
   getActiveCustomers,
   getActiveProjects,
+  getQuotationVatRateOptions,
   getQuotationVersions,
   getMilestonePaymentStatus,
   createMilestonePaymentIntent,
@@ -30,6 +31,9 @@ router.put('/:bookingId/edit', editQuotation);
 
 // Customer accepts or rejects quotation
 router.post('/:bookingId/customer-respond', customerRespondToQuotation);
+
+// VAT rates available for quotation pricing lines
+router.get('/:bookingId/vat-rates', getQuotationVatRateOptions);
 
 // Professional creates direct quotation (entry point 1.2)
 router.post('/direct', createDirectQuotation);

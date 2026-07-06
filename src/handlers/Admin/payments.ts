@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Payment from '../../models/payment';
 import { captureAndTransferPayment } from '../Stripe/payment';
+import { ensureBookingInvoiceArtifacts, ensureCreditInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -130,6 +131,83 @@ export const capturePayment = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       msg: error?.message || 'Failed to capture payment'
+    });
+  }
+};
+
+export const generatePaymentInvoice = async (req: Request, res: Response) => {
+  try {
+    const { paymentId } = req.params;
+
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, msg: 'Payment not found' });
+    }
+
+    if (!['completed', 'authorized'].includes(payment.status)) {
+      return res.status(400).json({
+        success: false,
+        msg: `Cannot generate invoice for payment with status "${payment.status}".`,
+      });
+    }
+
+    const result = await ensureBookingInvoiceArtifacts(payment.booking.toString());
+    if (!result) {
+      return res.status(400).json({ success: false, msg: 'Unable to generate invoice artifacts for this booking' });
+    }
+
+    return res.json({
+      success: true,
+      msg: 'Invoice artifacts generated',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('[ADMIN][PAYMENTS] Failed to generate invoice artifacts', error);
+    res.status(500).json({
+      success: false,
+      msg: error?.message || 'Failed to generate invoice artifacts',
+    });
+  }
+};
+
+export const generatePaymentCreditNote = async (req: Request, res: Response) => {
+  try {
+    const { paymentId } = req.params;
+
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, msg: 'Payment not found' });
+    }
+
+    if (!payment.invoiceNumber) {
+      return res.status(400).json({
+        success: false,
+        msg: 'Generate the original invoice before creating a credit note',
+      });
+    }
+
+    if (!['completed', 'refunded', 'partially_refunded'].includes(payment.status)) {
+      return res.status(400).json({
+        success: false,
+        msg: `Cannot generate credit note for payment with status "${payment.status}".`,
+      });
+    }
+
+    const result = await ensureCreditInvoiceArtifacts(payment.booking.toString());
+    if (!result) {
+      return res.status(400).json({ success: false, msg: 'Unable to generate credit note for this booking' });
+    }
+
+    return res.json({
+      success: true,
+      msg: 'Credit note artifacts generated',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('[ADMIN][PAYMENTS] Failed to generate credit note artifacts', error);
+    res.status(500).json({
+      success: false,
+      msg: error?.message || 'Failed to generate credit note artifacts',
     });
   }
 };
