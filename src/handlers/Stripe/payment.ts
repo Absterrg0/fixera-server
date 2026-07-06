@@ -713,18 +713,7 @@ export const confirmPayment = async (req: Request, res: Response) => {
       );
 
       try {
-        const invoiceArtifacts = await ensureBookingInvoiceArtifacts(booking._id.toString());
-        if (invoiceArtifacts) {
-          booking.payment = {
-            ...booking.payment,
-            invoiceNumber: invoiceArtifacts.invoiceNumber,
-            invoiceUrl: invoiceArtifacts.invoiceUrl,
-            invoiceUblUrl: invoiceArtifacts.invoiceUblUrl,
-            invoiceGeneratedAt: invoiceArtifacts.invoiceGeneratedAt,
-            peppolDispatchStatus: invoiceArtifacts.peppolDispatchStatus,
-            peppolDispatchReference: invoiceArtifacts.peppolDispatchReference,
-          } as any;
-        }
+        await ensureBookingInvoiceArtifacts(booking._id.toString());
       } catch (invoiceError: any) {
         console.error(
           `[PAYMENT CONFIRM] Payment authorized for booking ${booking._id}, but invoice generation failed:`,

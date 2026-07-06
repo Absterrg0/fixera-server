@@ -34,6 +34,7 @@ type PeppolDispatchPayload = {
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MAX_DISPATCH_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
+const PEPPOL_FETCH_TIMEOUT_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -164,6 +165,7 @@ const dispatchWithRetries = async (
         method: "POST",
         headers: request.headers,
         body: request.body,
+        signal: AbortSignal.timeout(PEPPOL_FETCH_TIMEOUT_MS),
       });
       const text = await response.text();
       let parsed: unknown = text;

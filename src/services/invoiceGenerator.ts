@@ -325,14 +325,17 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
       }
 
       for (const discount of data.discounts || []) {
+        const discountAmountLabel = discount.amount < 0
+          ? formatCurrency(discount.amount, data.payment.currency)
+          : `-${formatCurrency(discount.amount, data.payment.currency)}`;
         doc
           .text(discount.label, 50, rowY)
-          .text(`-${formatCurrency(discount.amount, data.payment.currency)}`, 450, rowY, { align: "right" });
+          .text(discountAmountLabel, 450, rowY, { align: "right" });
         rowY += 20;
       }
 
       // VAT
-      if (data.payment.vatAmount > 0) {
+      if (data.payment.vatAmount !== 0) {
         doc
           .text(`VAT (${data.payment.vatRate}%)`, 50, rowY)
           .text(formatCurrency(data.payment.vatAmount, data.payment.currency), 450, rowY, {

@@ -160,6 +160,9 @@ const validateVatManagement = (vatManagement: any): string | null => {
         if (!Number.isFinite(reducedRate) || reducedRate < 0 || reducedRate > 100) {
             return `VAT rule for ${rule.country} has an invalid reduced rate.`;
         }
+        if (reducedRate > standardRate) {
+            return `VAT rule for ${rule.country}: reduced rate cannot exceed standard rate.`;
+        }
         for (const condition of Array.isArray(rule?.conditions) ? rule.conditions : []) {
             const conditionField = String(condition?.fieldName || '').trim();
             if (!conditionField || !fieldNames.has(conditionField)) {
