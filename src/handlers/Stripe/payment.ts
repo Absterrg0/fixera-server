@@ -712,14 +712,12 @@ export const confirmPayment = async (req: Request, res: Response) => {
         })
       );
 
-      try {
-        await ensureBookingInvoiceArtifacts(booking._id.toString());
-      } catch (invoiceError: any) {
+      void ensureBookingInvoiceArtifacts(booking._id.toString()).catch((invoiceError: unknown) => {
         console.error(
           `[PAYMENT CONFIRM] Payment authorized for booking ${booking._id}, but invoice generation failed:`,
-          invoiceError?.message || invoiceError
+          invoiceError instanceof Error ? invoiceError.message : invoiceError
         );
-      }
+      });
 
       console.log(`✅ Payment authorized for booking ${booking._id}`);
 

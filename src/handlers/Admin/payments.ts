@@ -1,9 +1,13 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Payment from '../../models/payment';
 import { captureAndTransferPayment } from '../Stripe/payment';
 import { ensureBookingInvoiceArtifacts, ensureCreditInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const isValidPaymentId = (paymentId: string | string[] | undefined): paymentId is string =>
+  typeof paymentId === 'string' && mongoose.Types.ObjectId.isValid(paymentId);
 
 export const getPayments = async (req: Request, res: Response) => {
   try {
@@ -83,6 +87,10 @@ export const capturePayment = async (req: Request, res: Response) => {
   try {
     const { paymentId } = req.params;
 
+    if (!isValidPaymentId(paymentId)) {
+      return res.status(400).json({ success: false, msg: 'Invalid payment ID' });
+    }
+
     const payment = await Payment.findById(paymentId);
     if (!payment) {
       return res.status(404).json({ success: false, msg: 'Payment not found' });
@@ -148,6 +156,10 @@ type PaymentArtifactOptions = {
 const withPaymentArtifact = async (req: Request, res: Response, options: PaymentArtifactOptions) => {
   try {
     const { paymentId } = req.params;
+
+    if (!isValidPaymentId(paymentId)) {
+      return res.status(400).json({ success: false, msg: 'Invalid payment ID' });
+    }
 
     const payment = await Payment.findById(paymentId);
     if (!payment) {

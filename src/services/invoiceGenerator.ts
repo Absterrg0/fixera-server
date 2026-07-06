@@ -157,9 +157,9 @@ interface InvoiceBooking {
 export async function generateInvoiceNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const sequence = await InvoiceSequence.findOneAndUpdate(
-    { year },
+    { year, kind: "invoice" },
     {
-      $setOnInsert: { year },
+      $setOnInsert: { year, kind: "invoice" },
       $inc: { value: 1 },
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -175,9 +175,9 @@ export async function generateInvoiceNumber(): Promise<string> {
 export async function generateCreditNoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const sequence = await InvoiceSequence.findOneAndUpdate(
-    { year },
+    { year, kind: "credit_note" },
     {
-      $setOnInsert: { year },
+      $setOnInsert: { year, kind: "credit_note" },
       $inc: { value: 1 },
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
