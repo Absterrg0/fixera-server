@@ -327,7 +327,7 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
       for (const discount of data.discounts || []) {
         const discountAmountLabel = discount.amount < 0
           ? formatCurrency(discount.amount, data.payment.currency)
-          : `-${formatCurrency(discount.amount, data.payment.currency)}`;
+          : `-${formatCurrency(Math.abs(discount.amount), data.payment.currency)}`;
         doc
           .text(discount.label, 50, rowY)
           .text(discountAmountLabel, 450, rowY, { align: "right" });
