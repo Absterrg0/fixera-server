@@ -18,6 +18,7 @@ import { mapStripeAccountStatus } from '../../utils/stripeAccountStatus';
 import { deductPoints } from '../../utils/pointsSystem';
 import { sendPaymentConfirmedEmail, sendRefundProcessedEmail } from '../../utils/emailService';
 import { getProfessionalDisplayName } from '../../utils/displayName';
+import { ensureBookingInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const reserveWebhookEvent = async (event: Stripe.Event): Promise<{ shouldProcess: boolean }> => {
   const now = new Date();
@@ -256,6 +257,15 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
         ...(paymentIntent.latest_charge ? { stripeChargeId: paymentIntent.latest_charge as string } : {}),
       }
     );
+
+    try {
+      await ensureBookingInvoiceArtifacts(booking._id.toString());
+    } catch (invoiceError: any) {
+      console.error(
+        `[WEBHOOK] Payment authorized for booking ${bookingId}, but invoice generation failed:`,
+        invoiceError?.message || invoiceError
+      );
+    }
 
     // Deduct points now that payment is confirmed
     const pointsRedeemed = (booking.payment as any)?.discount?.pointsRedeemed;
