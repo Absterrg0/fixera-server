@@ -18,6 +18,7 @@ import { sendPushToUser } from "../../utils/fcmService";
 import { getFrontendUrl } from "../../utils/frontendUrl";
 import { IUser } from "../../models/user";
 import { applyB2BInvoiceRule, requiresVatRfqReview, resolveVatDecisionFromConfig } from "../../utils/vatManagement";
+import ServiceConfiguration from "../../models/serviceConfiguration";
 
 const presignMaybeS3Url = async (url?: string | null) => {
   if (!url) return url;
@@ -42,6 +43,10 @@ const normalizeRfqAnswers = (answers: any[] | undefined) => {
       answer: typeof answer?.answer === "string" ? answer.answer : String(answer?.answer ?? ""),
     };
 
+    if (answer?.fieldName) {
+      normalizedAnswer.fieldName = String(answer.fieldName);
+    }
+
     const rawFieldType = typeof answer?.fieldType === "string" ? answer.fieldType : undefined;
     const rawType = typeof answer?.type === "string" ? answer.type : undefined;
     const resolvedType = rawFieldType || rawType;
@@ -60,6 +65,38 @@ const normalizeRfqAnswers = (answers: any[] | undefined) => {
 
     return normalizedAnswer;
   });
+};
+
+const resolveNormalizedVatAnswers = async (
+  vatAnswers: unknown,
+  rfqAnswers: unknown,
+  serviceConfigurationId?: string
+): Promise<Record<string, unknown>> => {
+  if (Array.isArray(vatAnswers)) {
+    return vatAnswers.reduce((acc: Record<string, unknown>, answer: any) => {
+      if (answer?.fieldName) acc[String(answer.fieldName)] = answer.value;
+      return acc;
+    }, {});
+  }
+
+  const normalizedRfqAnswers = normalizeRfqAnswers(rfqAnswers as any[] | undefined);
+  let vatQuestions: Array<{ fieldName: string; question: string }> = [];
+  if (serviceConfigurationId && mongoose.Types.ObjectId.isValid(serviceConfigurationId)) {
+    const config = await ServiceConfiguration.findById(serviceConfigurationId)
+      .select("vatManagement.reducedVatQuestions");
+    vatQuestions = config?.vatManagement?.reducedVatQuestions || [];
+  }
+
+  const questionToFieldName = new Map(
+    vatQuestions.map((question) => [question.question.trim().toLowerCase(), question.fieldName])
+  );
+
+  return normalizedRfqAnswers.reduce((acc: Record<string, unknown>, answer: any) => {
+    const fieldName = answer.fieldName
+      || questionToFieldName.get(String(answer.question || "").trim().toLowerCase());
+    if (fieldName) acc[String(fieldName)] = answer.answer;
+    return acc;
+  }, {});
 };
 
 const roundMoney = (value: number): number =>
@@ -318,6 +355,18 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
       });
     }
 
+    let configIdForVat = serviceConfigurationId;
+    if (!Array.isArray(vatAnswers) && bookingType === "project" && projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+      const projectForVat = await Project.findById(projectId).select("serviceConfigurationId");
+      configIdForVat = configIdForVat || projectForVat?.serviceConfigurationId?.toString();
+    }
+
+    const normalizedVatAnswers = await resolveNormalizedVatAnswers(
+      vatAnswers,
+      rfqData?.answers,
+      configIdForVat
+    );
+
     // Create booking payload (base fields)
     const bookingData: any = {
       customer: userId,
@@ -341,16 +390,6 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
         attachments: rfqData.attachments || []
       }
     };
-
-    const normalizedVatAnswers = Array.isArray(vatAnswers)
-      ? vatAnswers.reduce((acc: Record<string, unknown>, answer: any) => {
-          if (answer?.fieldName) acc[String(answer.fieldName)] = answer.value;
-          return acc;
-        }, {})
-      : normalizeRfqAnswers(rfqData.answers).reduce((acc: Record<string, unknown>, answer: any) => {
-          if (answer.questionId) acc[answer.questionId] = answer.answer;
-          return acc;
-        }, {});
 
     if (customerBlocks) {
       bookingData.customerBlocks = customerBlocks;

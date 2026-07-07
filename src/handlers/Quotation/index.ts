@@ -82,6 +82,36 @@ const validatePricingLinesAgainstAllowedVat = async (booking: any, lines: Array<
   return { valid: true };
 };
 
+const applyAllowedVatRateToLegacyPricingLines = async (
+  booking: any,
+  normalizedPricing: { lines?: Array<{ vatRate: number; vatLabel?: string; description: string; price: number; vatCountry?: string }>; totalAmount?: number; error?: string }
+) => {
+  if (!normalizedPricing.lines?.length || normalizedPricing.error) {
+    return normalizedPricing;
+  }
+
+  const usesLegacyFallback = normalizedPricing.lines.every(
+    (line) => line.vatLabel === 'VAT selected at checkout' && Number(line.vatRate) === 0
+  );
+  if (!usesLegacyFallback) {
+    return normalizedPricing;
+  }
+
+  const options = await getAllowedVatOptionsForBooking(booking);
+  const fallbackRate = options.find((option) => option.source === 'standard')?.rate ?? options[0]?.rate;
+  if (fallbackRate == null) {
+    return normalizedPricing;
+  }
+
+  return {
+    ...normalizedPricing,
+    lines: normalizedPricing.lines.map((line) => ({
+      ...line,
+      vatRate: fallbackRate,
+    })),
+  };
+};
+
 export const getQuotationVatRateOptions = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.params;
@@ -478,7 +508,8 @@ export const submitQuotation = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be submitted when status is rfq_accepted or draft_quote' } });
     }
 
-    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    const pricingWithLegacyVat = await applyAllowedVatRateToLegacyPricingLines(booking, normalizedPricing);
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, pricingWithLegacyVat.lines || []);
     if (!vatValidation.valid) {
       return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
     }
@@ -493,7 +524,7 @@ export const submitQuotation = async (req: Request, res: Response) => {
       materialsIncluded,
       materials: materialsIncluded ? materials : [],
       description,
-      pricingLines: normalizedPricing.lines,
+      pricingLines: pricingWithLegacyVat.lines,
       totalAmount: normalizedTotalAmount,
       currency: currency || 'EUR',
       milestones: milestones ? milestones.map((m: any, i: number): IQuotationMilestone => ({
@@ -640,7 +671,8 @@ export const editQuotation = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Quotation can only be edited when status is quoted or quote_rejected' } });
     }
 
-    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, normalizedPricing.lines || []);
+    const pricingWithLegacyVat = await applyAllowedVatRateToLegacyPricingLines(booking, normalizedPricing);
+    const vatValidation = await validatePricingLinesAgainstAllowedVat(booking, pricingWithLegacyVat.lines || []);
     if (!vatValidation.valid) {
       return res.status(400).json({ success: false, error: { code: 'INVALID_VAT_RATE', message: vatValidation.message } });
     }
@@ -656,7 +688,7 @@ export const editQuotation = async (req: Request, res: Response) => {
       materialsIncluded,
       materials: materialsIncluded ? materials : [],
       description,
-      pricingLines: normalizedPricing.lines,
+      pricingLines: pricingWithLegacyVat.lines,
       totalAmount: normalizedTotalAmount,
       currency: currency || 'EUR',
       milestones: milestones ? milestones.map((m: any, i: number): IQuotationMilestone => ({
