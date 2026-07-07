@@ -48,6 +48,31 @@ describe("calculateVatFromPricingLines", () => {
     expect(result!.total).toBe(1035);
   });
 
+  it("returns null when discounted net exceeds the original net", () => {
+    const result = calculateVatFromPricingLines(
+      [
+        { description: "A", price: 600, vatRate: 21 },
+        { description: "B", price: 400, vatRate: 6 },
+      ],
+      1100
+    );
+    expect(result).toBeNull();
+  });
+
+  it("keeps the final line non-negative under rounding pressure", () => {
+    const result = calculateVatFromPricingLines(
+      Array.from({ length: 9 }, (_, index) => ({
+        description: `Line ${index + 1}`,
+        price: 0.01,
+        vatRate: 21,
+      })),
+      0.05
+    );
+    expect(result).not.toBeNull();
+    expect(result!.vatBreakdown.every((line) => line.netAmount >= 0)).toBe(true);
+    expect(result!.vatBreakdown.reduce((sum, line) => sum + line.netAmount, 0)).toBe(0.05);
+  });
+
   it("flags reverse charge when every line is 0%", () => {
     const result = calculateVatFromPricingLines([
       { description: "B2B export", price: 250, vatRate: 0 },

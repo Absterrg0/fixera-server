@@ -1,8 +1,13 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Payment from '../../models/payment';
 import { captureAndTransferPayment } from '../Stripe/payment';
+import { ensureBookingInvoiceArtifacts, ensureCreditInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const isValidPaymentId = (paymentId: string | string[] | undefined): paymentId is string =>
+  typeof paymentId === 'string' && mongoose.Types.ObjectId.isValid(paymentId);
 
 export const getPayments = async (req: Request, res: Response) => {
   try {
@@ -82,6 +87,10 @@ export const capturePayment = async (req: Request, res: Response) => {
   try {
     const { paymentId } = req.params;
 
+    if (!isValidPaymentId(paymentId)) {
+      return res.status(400).json({ success: false, msg: 'Invalid payment ID' });
+    }
+
     const payment = await Payment.findById(paymentId);
     if (!payment) {
       return res.status(404).json({ success: false, msg: 'Payment not found' });
@@ -133,3 +142,83 @@ export const capturePayment = async (req: Request, res: Response) => {
     });
   }
 };
+
+type PaymentArtifactOptions = {
+  allowedStatuses: string[];
+  statusErrorMessage: (status: string) => string;
+  preValidate?: (payment: { status: string; invoiceNumber?: string }) => string | null;
+  generate: (bookingId: string) => Promise<unknown>;
+  failureMessage: string;
+  successMessage: string;
+  logLabel: string;
+};
+
+const withPaymentArtifact = async (req: Request, res: Response, options: PaymentArtifactOptions) => {
+  try {
+    const { paymentId } = req.params;
+
+    if (!isValidPaymentId(paymentId)) {
+      return res.status(400).json({ success: false, msg: 'Invalid payment ID' });
+    }
+
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, msg: 'Payment not found' });
+    }
+
+    if (options.preValidate) {
+      const preValidationError = options.preValidate(payment);
+      if (preValidationError) {
+        return res.status(400).json({ success: false, msg: preValidationError });
+      }
+    }
+
+    if (!options.allowedStatuses.includes(payment.status)) {
+      return res.status(400).json({
+        success: false,
+        msg: options.statusErrorMessage(payment.status),
+      });
+    }
+
+    const result = await options.generate(payment.booking.toString());
+    if (!result) {
+      return res.status(400).json({ success: false, msg: options.failureMessage });
+    }
+
+    return res.json({
+      success: true,
+      msg: options.successMessage,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error(`[ADMIN][PAYMENTS] ${options.logLabel}`, error);
+    return res.status(500).json({
+      success: false,
+      msg: error?.message || options.failureMessage,
+    });
+  }
+};
+
+export const generatePaymentInvoice = async (req: Request, res: Response) =>
+  withPaymentArtifact(req, res, {
+    allowedStatuses: ['completed', 'authorized'],
+    statusErrorMessage: (status) => `Cannot generate invoice for payment with status "${status}".`,
+    generate: ensureBookingInvoiceArtifacts,
+    failureMessage: 'Unable to generate invoice artifacts for this booking',
+    successMessage: 'Invoice artifacts generated',
+    logLabel: 'Failed to generate invoice artifacts',
+  });
+
+export const generatePaymentCreditNote = async (req: Request, res: Response) =>
+  withPaymentArtifact(req, res, {
+    allowedStatuses: ['completed', 'refunded', 'partially_refunded'],
+    statusErrorMessage: (status) => `Cannot generate credit note for payment with status "${status}".`,
+    preValidate: (payment) =>
+      payment.invoiceNumber
+        ? null
+        : 'Generate the original invoice before creating a credit note',
+    generate: ensureCreditInvoiceArtifacts,
+    failureMessage: 'Unable to generate credit note for this booking',
+    successMessage: 'Credit note artifacts generated',
+    logLabel: 'Failed to generate credit note artifacts',
+  });

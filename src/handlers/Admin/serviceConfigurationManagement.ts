@@ -174,6 +174,27 @@ const validateVatManagement = (vatManagement: any): string | null => {
     return null;
 };
 
+const mergeVatManagement = (existingVatManagement: any, patch: any) => {
+    if (patch == null || typeof patch !== 'object') {
+        return patch;
+    }
+
+    const existing = existingVatManagement && typeof existingVatManagement === 'object'
+        ? existingVatManagement
+        : {};
+
+    return {
+        ...existing,
+        ...patch,
+        reducedVatQuestions: Array.isArray(patch.reducedVatQuestions)
+            ? patch.reducedVatQuestions
+            : existing.reducedVatQuestions || [],
+        logicRules: Array.isArray(patch.logicRules)
+            ? patch.logicRules
+            : existing.logicRules || [],
+    };
+};
+
 /**
  * Create a new service configuration
  * @route POST /api/admin/service-configurations
@@ -224,9 +245,18 @@ export const createServiceConfiguration = async (req: Request, res: Response) =>
 export const updateServiceConfiguration = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const updateData = req.body;
+        const updateData = { ...req.body };
+
+        const existingConfiguration = await ServiceConfiguration.findById(id);
+        if (!existingConfiguration) {
+            return res.status(404).json({
+                success: false,
+                message: 'Service configuration not found'
+            });
+        }
 
         if (updateData?.vatManagement !== undefined) {
+            updateData.vatManagement = mergeVatManagement(existingConfiguration.vatManagement, updateData.vatManagement);
             const vatError = validateVatManagement(updateData.vatManagement);
             if (vatError) {
                 return res.status(400).json({ success: false, message: vatError });
@@ -238,13 +268,6 @@ export const updateServiceConfiguration = async (req: Request, res: Response) =>
             updateData,
             { new: true, runValidators: true }
         );
-
-        if (!configuration) {
-            return res.status(404).json({
-                success: false,
-                message: 'Service configuration not found'
-            });
-        }
 
         res.status(200).json({
             success: true,

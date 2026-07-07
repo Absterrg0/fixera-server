@@ -212,6 +212,13 @@ const VatLogicRuleSchema = new Schema<IVatLogicRule>({
     isActive: { type: Boolean, default: true }
 }, { _id: false });
 
+VatLogicRuleSchema.pre('validate', function(next) {
+    if (this.reducedRate > this.standardRate) {
+        return next(new Error('Reduced VAT rate cannot exceed the standard VAT rate'));
+    }
+    next();
+});
+
 const VatManagementSchema = new Schema<IVatManagement>({
     enabled: { type: Boolean, default: false },
     rateRuleGroup: { type: String, trim: true },

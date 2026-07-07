@@ -131,6 +131,36 @@ describe("evaluateVatRule", () => {
     expect(evaluateVatRule(rule, { work_types: ["roofing", "insulation"] })).toBe(true);
     expect(evaluateVatRule(rule, { work_types: ["roofing"] })).toBe(false);
   });
+
+  it("supports the remaining comparison operators and unknown fallback", () => {
+    expect(
+      evaluateVatRule(
+        makeRule({ conditions: [{ fieldName: "occupancy", operator: "not_equals", value: "commercial" }] }),
+        { occupancy: "residential" }
+      )
+    ).toBe(true);
+
+    expect(
+      evaluateVatRule(
+        makeRule({ conditions: [{ fieldName: "building_age", operator: "less_than", value: 10 }] }),
+        { building_age: 9 }
+      )
+    ).toBe(true);
+
+    expect(
+      evaluateVatRule(
+        makeRule({ conditions: [{ fieldName: "building_age", operator: "less_than_or_equal", value: 10 }] }),
+        { building_age: 10 }
+      )
+    ).toBe(true);
+
+    expect(
+      evaluateVatRule(
+        makeRule({ conditions: [{ fieldName: "building_age", operator: "mystery" as any, value: 10 }] }),
+        { building_age: 10 }
+      )
+    ).toBe(false);
+  });
 });
 
 const makeDecision = (overrides: Partial<VatDecision> = {}): VatDecision => ({

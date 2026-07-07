@@ -37,6 +37,7 @@ import {
   sendDisputeRaisedEmail,
 } from '../../utils/emailService';
 import { DISPUTE_SLA_HOURS } from '../../constants/dispute';
+import { ensureBookingInvoiceArtifacts } from '../../services/invoiceArtifacts';
 
 const ADMIN_NOTIFICATIONS_EMAIL = process.env.ADMIN_NOTIFICATIONS_EMAIL || process.env.FROM_EMAIL || '';
 
@@ -705,6 +706,12 @@ export const customerConfirmCompletion = async (req: Request, res: Response) => 
       await awardBookingCompletionPoints(proId, finalizedBooking.customer, finalizedBooking._id);
     } catch (e) {
       console.error('Error awarding booking completion points:', e);
+    }
+
+    try {
+      await ensureBookingInvoiceArtifacts(finalizedBooking._id.toString());
+    } catch (invoiceError: any) {
+      console.error('Failed to generate booking invoice artifacts:', invoiceError?.message || invoiceError);
     }
 
     try {

@@ -35,6 +35,16 @@ export interface IPayment extends Document {
   vatAmount?: number;
   vatRate?: number;
   totalWithVat?: number;
+  reverseCharge?: boolean;
+  vatBreakdown?: {
+    description: string;
+    netAmount: number;
+    vatRate: number;
+    vatAmount: number;
+    totalAmount: number;
+    vatCountry?: string;
+    vatLabel?: string;
+  }[];
   platformCommission?: number;
   professionalPayout?: number;
 
@@ -53,7 +63,18 @@ export interface IPayment extends Document {
 
   invoiceNumber?: string;
   invoiceUrl?: string;
+  invoiceUblUrl?: string;
   invoiceGeneratedAt?: Date;
+  peppolDispatchStatus?: string;
+  peppolDispatchReference?: string;
+  peppolDispatchedAt?: Date;
+  creditNoteNumber?: string;
+  creditNoteUrl?: string;
+  creditNoteUblUrl?: string;
+  creditNoteGeneratedAt?: Date;
+  creditNoteRelatedInvoiceNumber?: string;
+  creditNotePeppolDispatchStatus?: string;
+  creditNotePeppolDispatchReference?: string;
 
   metadata?: Record<string, any>;
 
@@ -110,6 +131,16 @@ const PaymentSchema = new Schema<IPayment>(
     vatAmount: { type: Number },
     vatRate: { type: Number },
     totalWithVat: { type: Number },
+    reverseCharge: { type: Boolean },
+    vatBreakdown: [{
+      description: { type: String },
+      netAmount: { type: Number },
+      vatRate: { type: Number },
+      vatAmount: { type: Number },
+      totalAmount: { type: Number },
+      vatCountry: { type: String },
+      vatLabel: { type: String },
+    }],
     platformCommission: { type: Number },
     professionalPayout: { type: Number },
 
@@ -128,7 +159,18 @@ const PaymentSchema = new Schema<IPayment>(
 
     invoiceNumber: { type: String },
     invoiceUrl: { type: String },
+    invoiceUblUrl: { type: String },
     invoiceGeneratedAt: { type: Date },
+    peppolDispatchStatus: { type: String },
+    peppolDispatchReference: { type: String },
+    peppolDispatchedAt: { type: Date },
+    creditNoteNumber: { type: String },
+    creditNoteUrl: { type: String },
+    creditNoteUblUrl: { type: String },
+    creditNoteGeneratedAt: { type: Date },
+    creditNoteRelatedInvoiceNumber: { type: String },
+    creditNotePeppolDispatchStatus: { type: String },
+    creditNotePeppolDispatchReference: { type: String },
 
     metadata: { type: Schema.Types.Mixed },
   },

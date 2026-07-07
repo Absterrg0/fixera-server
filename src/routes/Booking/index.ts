@@ -10,6 +10,8 @@ import {
   updateBookingStatus,
   cancelBooking,
   uploadRFQAttachment,
+  proceedAtStandardVatRate,
+  previewVatDecision,
 } from '../../handlers/Booking';
 import {
   respondToQuoteWithPayment,
@@ -47,6 +49,9 @@ router.use(protect);
 // Create booking (RFQ submission) - Customer only
 router.post('/create', createBooking);
 
+// Preview VAT decision for the booking wizard (before booking creation)
+router.post('/vat-preview', previewVatDecision);
+
 // Upload RFQ attachment (10MB limit)
 router.post('/rfq-upload', rfqUpload.single('file'), uploadRFQAttachment);
 
@@ -64,6 +69,9 @@ router.get('/refund-requests', listProfessionalRefundRequests);
 
 // Get single booking by ID
 router.get('/:bookingId', getBookingById);
+
+// Customer opts to proceed at standard VAT when RFQ review was triggered
+router.post('/:bookingId/vat-proceed-standard', proceedAtStandardVatRate);
 
 // Submit post-booking answers (Customer only)
 router.post('/:bookingId/post-booking-answers', submitPostBookingAnswers);

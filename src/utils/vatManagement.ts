@@ -1,4 +1,5 @@
 import ServiceConfiguration, { IVatLogicCondition, IVatLogicRule } from "../models/serviceConfiguration";
+import { validateVATNumberFormat } from "./vatValidation";
 
 export type VatRoutingAction = "standard_rate" | "reduced_rate" | "rfq";
 
@@ -161,7 +162,7 @@ export const evaluateVatRule = (rule: IVatLogicRule, answers: Record<string, unk
 };
 
 const hasVerifiedVatNumber = (vatNumber?: string | null, isVatVerified?: boolean): boolean =>
-  Boolean(isVatVerified && vatNumber && /^[A-Z]{2}[A-Z0-9]{6,14}$/i.test(vatNumber.replace(/\s/g, "")));
+  Boolean(isVatVerified && vatNumber && validateVATNumberFormat(vatNumber));
 
 export const applyB2BInvoiceRule = (
   decision: VatDecision,
@@ -211,11 +212,7 @@ export const getVatRateOptionsFromConfig = async (params: {
     isVatVerified: params.isVatVerified,
   });
 
-  if (
-    params.customerType === "business" &&
-    !isB2BSameAsB2CCountry(country) &&
-    hasVerifiedVatNumber(params.vatNumber, params.isVatVerified)
-  ) {
+  if (decision.reverseCharge && decision.appliedRate === 0) {
     return [{
       rate: 0,
       country,
@@ -281,7 +278,7 @@ export const resolveVatDecisionFromConfig = async (params: {
     explanation: `Standard VAT rate ${fallbackRate}% applied.`,
   };
 
-  const query = params.serviceConfigurationId
+  const query = params.serviceConfigurationId && /^[a-f\d]{24}$/i.test(params.serviceConfigurationId)
     ? { _id: params.serviceConfigurationId }
     : {
         ...(params.category ? { category: params.category } : {}),
@@ -293,7 +290,7 @@ export const resolveVatDecisionFromConfig = async (params: {
     ? await ServiceConfiguration.findOne(query).select("category service vatManagement")
     : null;
 
-  if (config?.category === "Renovation") {
+  if (config?.category === "Renovation" || params.category === "Renovation") {
     return applyB2BInvoiceRule({
       ...fallback,
       action: "rfq",

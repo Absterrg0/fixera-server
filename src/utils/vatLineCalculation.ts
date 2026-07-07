@@ -35,7 +35,8 @@ export const calculateVatFromPricingLines = (
     Number.isFinite(Number(line.price)) &&
     Number(line.price) > 0 &&
     Number.isFinite(Number(line.vatRate)) &&
-    Number(line.vatRate) >= 0
+    Number(line.vatRate) >= 0 &&
+    Number(line.vatRate) <= 100
   );
 
   if (validLines.length === 0) return null;
@@ -46,14 +47,16 @@ export const calculateVatFromPricingLines = (
   const targetNet = Number.isFinite(discountedNetAmount) && Number(discountedNetAmount) > 0
     ? roundMoney(Number(discountedNetAmount))
     : originalNet;
+  if (targetNet > originalNet) return null;
   const ratio = targetNet / originalNet;
 
   let allocatedNet = 0;
   const vatBreakdown = validLines.map((line, index) => {
     const isLast = index === validLines.length - 1;
+    const remainingNet = roundMoney(targetNet - allocatedNet);
     const netAmount = isLast
-      ? roundMoney(targetNet - allocatedNet)
-      : roundMoney(Number(line.price) * ratio);
+      ? Math.max(0, remainingNet)
+      : Math.max(0, Math.min(remainingNet, roundMoney(Number(line.price) * ratio)));
     allocatedNet = roundMoney(allocatedNet + netAmount);
 
     const vatRate = Number(line.vatRate);

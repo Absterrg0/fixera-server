@@ -74,6 +74,15 @@ export interface BookingPayment {
   vatAmount: number;
   vatRate: number;
   totalWithVat: number;
+  vatBreakdown?: {
+    description: string;
+    netAmount: number;
+    vatRate: number;
+    vatAmount: number;
+    totalAmount: number;
+    vatCountry?: string;
+    vatLabel?: string;
+  }[];
 
   // Multi-currency support
   originalCurrency?: string;
@@ -150,6 +159,7 @@ export interface VATCalculationParams {
   amount: number;
   customerCountry: string;
   customerVATNumber: string | null;
+  customerVatVerified?: boolean;
   professionalCountry: string;
   customerType: 'individual' | 'business';
 }
