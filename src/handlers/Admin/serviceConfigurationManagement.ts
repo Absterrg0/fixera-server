@@ -268,6 +268,12 @@ export const updateServiceConfiguration = async (req: Request, res: Response) =>
             updateData,
             { new: true, runValidators: true }
         );
+        if (!configuration) {
+            return res.status(404).json({
+                success: false,
+                message: 'Service configuration not found'
+            });
+        }
 
         res.status(200).json({
             success: true,
