@@ -180,7 +180,9 @@ const mergeVatManagement = (existingVatManagement: any, patch: any) => {
     }
 
     const existing = existingVatManagement && typeof existingVatManagement === 'object'
-        ? existingVatManagement
+        ? (typeof existingVatManagement.toObject === 'function'
+            ? existingVatManagement.toObject()
+            : existingVatManagement)
         : {};
 
     return {

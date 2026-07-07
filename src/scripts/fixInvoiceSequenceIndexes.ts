@@ -4,6 +4,10 @@
  * One-time migration (safe to re-run): drops the legacy unique index on `year`
  * alone so the compound { year, kind } index can take effect for separate
  * invoice and credit-note counters.
+ *
+ * Run during a low-traffic window or with invoice-sequence writes paused.
+ * Between dropping the legacy index and recreating the compound unique index,
+ * duplicate sequence numbers are possible if writers are active.
  */
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -21,6 +25,9 @@ async function fixInvoiceSequenceIndexes() {
 
   await mongoose.connect(mongoUri);
   console.log("Connected to MongoDB");
+  console.warn(
+    "WARNING: Run this migration during a low-traffic window or with invoice-sequence writes paused."
+  );
 
   const db = mongoose.connection.db;
   if (!db) {

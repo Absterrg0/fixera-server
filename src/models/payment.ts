@@ -1,6 +1,9 @@
 import { Schema, model, Document, Types } from "mongoose";
 import { STRIPE_CONFIG } from "../services/stripe";
 import { VatBreakdownLine } from "../Types/stripe";
+import { PeppolDispatchStatus } from "../services/peppolDispatch";
+
+const PEPPOL_DISPATCH_STATUSES: PeppolDispatchStatus[] = ["skipped", "queued", "sent", "failed"];
 
 export type PaymentStatus =
   | "pending"
@@ -154,7 +157,7 @@ const PaymentSchema = new Schema<IPayment>(
     invoiceUrl: { type: String },
     invoiceUblUrl: { type: String },
     invoiceGeneratedAt: { type: Date },
-    peppolDispatchStatus: { type: String },
+    peppolDispatchStatus: { type: String, enum: PEPPOL_DISPATCH_STATUSES },
     peppolDispatchReference: { type: String },
     peppolDispatchedAt: { type: Date },
     creditNoteNumber: { type: String },
@@ -162,7 +165,7 @@ const PaymentSchema = new Schema<IPayment>(
     creditNoteUblUrl: { type: String },
     creditNoteGeneratedAt: { type: Date },
     creditNoteRelatedInvoiceNumber: { type: String },
-    creditNotePeppolDispatchStatus: { type: String },
+    creditNotePeppolDispatchStatus: { type: String, enum: PEPPOL_DISPATCH_STATUSES },
     creditNotePeppolDispatchReference: { type: String },
 
     metadata: { type: Schema.Types.Mixed },

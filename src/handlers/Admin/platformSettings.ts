@@ -89,16 +89,28 @@ export const updatePlatformSettings = async (req: Request, res: Response, next: 
       ) {
         return res.status(400).json({ success: false, msg: 'Invalid e-invoicing provider' });
       }
+      const peppolEnabled = eInvoicing.peppolEnabled !== undefined
+        ? eInvoicing.peppolEnabled === true
+        : (config.eInvoicing?.peppolEnabled ?? false);
+      const provider = eInvoicing.provider !== undefined && ['odoo', 'billit', 'manual'].includes(String(eInvoicing.provider))
+        ? eInvoicing.provider
+        : (config.eInvoicing?.provider ?? 'manual');
+      const peppolParticipantId = typeof eInvoicing.peppolParticipantId === 'string'
+        ? eInvoicing.peppolParticipantId.trim()
+        : config.eInvoicing?.peppolParticipantId;
+      const participantIdPattern = /^\d{4}:[^\s:]+$/;
+      if (peppolEnabled && provider !== 'manual') {
+        if (!peppolParticipantId || !participantIdPattern.test(peppolParticipantId)) {
+          return res.status(400).json({
+            success: false,
+            msg: 'A valid Peppol participant ID (scheme:identifier, e.g. 0208:BE0123456789) is required when Peppol is enabled with a provider',
+          });
+        }
+      }
       config.eInvoicing = {
-        peppolEnabled: eInvoicing.peppolEnabled !== undefined
-          ? eInvoicing.peppolEnabled === true
-          : (config.eInvoicing?.peppolEnabled ?? false),
-        provider: eInvoicing.provider !== undefined && ['odoo', 'billit', 'manual'].includes(String(eInvoicing.provider))
-          ? eInvoicing.provider
-          : (config.eInvoicing?.provider ?? 'manual'),
-        peppolParticipantId: typeof eInvoicing.peppolParticipantId === 'string'
-          ? eInvoicing.peppolParticipantId.trim()
-          : config.eInvoicing?.peppolParticipantId,
+        peppolEnabled,
+        provider,
+        peppolParticipantId,
       };
     }
     config.lastModifiedBy = adminUser._id as any;

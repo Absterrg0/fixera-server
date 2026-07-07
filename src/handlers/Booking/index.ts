@@ -359,6 +359,12 @@ export const createBooking = async (req: Request, res: Response, next: NextFunct
     if (bookingType === "project" && projectId && mongoose.Types.ObjectId.isValid(projectId)) {
       const projectForVat = await Project.findById(projectId).select("serviceConfigurationId");
       configIdForVat = projectForVat?.serviceConfigurationId?.toString();
+    } else if (
+      bookingType === "professional" &&
+      serviceConfigurationId &&
+      mongoose.Types.ObjectId.isValid(serviceConfigurationId)
+    ) {
+      configIdForVat = String(serviceConfigurationId);
     }
 
     const normalizedVatAnswers = await resolveNormalizedVatAnswers(
@@ -1830,14 +1836,24 @@ export const proceedAtStandardVatRate = async (req: Request, res: Response, next
       );
 
       if (amount > 0) {
+        const breakdown = [
+          ...snapshotToQuoteBreakdown(snapshot, subprojectIndex),
+          ...fallbackOptionLines,
+        ];
+        const computedTotalIndex = breakdown.findIndex((line) => line.item === "checkout_snapshot:computed_total");
+        if (computedTotalIndex >= 0) {
+          breakdown[computedTotalIndex] = {
+            ...breakdown[computedTotalIndex],
+            unitPrice: amount,
+            totalPrice: amount,
+          };
+        }
+
         booking.quote = {
           amount,
           currency: booking.quote?.currency || snapshot.currency || "EUR",
           description: `Auto-generated checkout quote for ${project.title || "service"}`,
-          breakdown: [
-            ...snapshotToQuoteBreakdown(snapshot, subprojectIndex),
-            ...fallbackOptionLines,
-          ],
+          breakdown,
           submittedAt: new Date(),
           submittedBy: booking.professional,
         } as any;

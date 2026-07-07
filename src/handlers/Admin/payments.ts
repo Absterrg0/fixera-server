@@ -147,7 +147,7 @@ type PaymentArtifactOptions = {
   allowedStatuses: string[];
   statusErrorMessage: (status: string) => string;
   preValidate?: (payment: { status: string; invoiceNumber?: string }) => string | null;
-  generate: (bookingId: string) => Promise<unknown>;
+  generate: (bookingId: string, paymentId: string) => Promise<unknown>;
   failureMessage: string;
   successMessage: string;
   logLabel: string;
@@ -180,7 +180,7 @@ const withPaymentArtifact = async (req: Request, res: Response, options: Payment
       });
     }
 
-    const result = await options.generate(payment.booking.toString());
+    const result = await options.generate(payment.booking.toString(), payment._id.toString());
     if (!result) {
       return res.status(400).json({ success: false, msg: options.failureMessage });
     }
@@ -203,7 +203,7 @@ export const generatePaymentInvoice = async (req: Request, res: Response) =>
   withPaymentArtifact(req, res, {
     allowedStatuses: ['completed', 'authorized'],
     statusErrorMessage: (status) => `Cannot generate invoice for payment with status "${status}".`,
-    generate: ensureBookingInvoiceArtifacts,
+    generate: (bookingId, paymentId) => ensureBookingInvoiceArtifacts(bookingId, paymentId),
     failureMessage: 'Unable to generate invoice artifacts for this booking',
     successMessage: 'Invoice artifacts generated',
     logLabel: 'Failed to generate invoice artifacts',
@@ -217,7 +217,7 @@ export const generatePaymentCreditNote = async (req: Request, res: Response) =>
       payment.invoiceNumber
         ? null
         : 'Generate the original invoice before creating a credit note',
-    generate: ensureCreditInvoiceArtifacts,
+    generate: (bookingId, paymentId) => ensureCreditInvoiceArtifacts(bookingId, paymentId),
     failureMessage: 'Unable to generate credit note for this booking',
     successMessage: 'Credit note artifacts generated',
     logLabel: 'Failed to generate credit note artifacts',

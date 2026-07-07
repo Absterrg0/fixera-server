@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Booking from "../models/booking";
 import Payment from "../models/payment";
 import { uploadBufferToS3 } from "../utils/s3Upload";
@@ -120,6 +121,43 @@ const clearCreditNoteGenerationClaim = async (bookingId: string) => {
   );
 };
 
+const GENERATION_CLAIM_TTL_MS = 15 * 60 * 1000;
+
+const parseGenerationClaimTimestamp = (value: string, prefix: string): number | null => {
+  if (!value.startsWith(prefix)) return null;
+  const timestamp = Number(value.slice(prefix.length));
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const isStaleGenerationClaim = (value?: string | null, prefix = "GENERATING-"): boolean => {
+  if (!value?.startsWith(prefix)) return false;
+  const timestamp = parseGenerationClaimTimestamp(value, prefix);
+  if (timestamp == null) return true;
+  return Date.now() - timestamp > GENERATION_CLAIM_TTL_MS;
+};
+
+const clearStaleGenerationClaimsIfNeeded = async (bookingId: string) => {
+  const booking = await Booking.findById(bookingId).select("payment.invoiceNumber payment.creditNoteNumber");
+  if (isStaleGenerationClaim(booking?.payment?.invoiceNumber, "GENERATING-")) {
+    await clearInvoiceGenerationClaim(bookingId);
+  }
+  if (isStaleGenerationClaim(booking?.payment?.creditNoteNumber, "GENERATING-CN-")) {
+    await clearCreditNoteGenerationClaim(bookingId);
+  }
+};
+
+const persistPaymentArtifactUpdate = async (
+  bookingId: mongoose.Types.ObjectId | string,
+  paymentId: string | undefined,
+  update: Record<string, unknown>
+) => {
+  if (paymentId && mongoose.Types.ObjectId.isValid(paymentId)) {
+    await Payment.findByIdAndUpdate(paymentId, { $set: update });
+    return;
+  }
+  await Payment.findOneAndUpdate({ booking: bookingId }, { $set: update });
+};
+
 const toMoney = (value: unknown): string => {
   const amount = Number(value);
   return (Number.isFinite(amount) ? amount : 0).toFixed(2);
@@ -146,58 +184,41 @@ const buildUblAddress = (parts: {
       </cac:PostalAddress>`;
 };
 
-const buildUblInvoiceXml = (
+const getPricingLinesForUbl = (booking: any) => {
+  const currentQuote = getCurrentQuote(booking);
+  if (Array.isArray(booking.payment?.vatBreakdown) && booking.payment.vatBreakdown.length > 0) {
+    return booking.payment.vatBreakdown.map((line: any) => ({
+      description: line.description,
+      price: line.netAmount,
+      vatRate: line.vatRate,
+      vatAmount: line.vatAmount,
+    }));
+  }
+  if (Array.isArray(currentQuote?.pricingLines) && currentQuote.pricingLines.length > 0) {
+    return currentQuote.pricingLines;
+  }
+  return [{
+    description: booking.quote?.description || booking.rfqData?.description || "Service",
+    price: booking.payment?.netAmount ?? booking.payment?.amount ?? 0,
+    vatRate: booking.payment?.vatRate ?? 0,
+    vatAmount: booking.payment?.vatAmount ?? 0,
+  }];
+};
+
+const buildUblPartiesAndTotals = (
   booking: any,
-  invoiceNumber: string,
-  issuedAt: Date,
-  options?: { creditNote?: boolean; relatedInvoiceNumber?: string }
-): string => {
-  const currency = booking.payment?.currency || "EUR";
+  currency: string,
+  sign: number,
+  pricingLines: any[],
+  reverseCharge: boolean
+) => {
   const customer = booking.customer || {};
   const professional = booking.professional || {};
-  const currentQuote = getCurrentQuote(booking);
-  const sign = options?.creditNote ? -1 : 1;
-  const reverseCharge = Boolean(booking.payment?.reverseCharge);
-  // Self-billed documents: 389 = self-billed invoice, 261 = self-billed credit note (UNCL1001)
-  const invoiceTypeCode = options?.creditNote ? "261" : "389";
   const taxCategoryId = reverseCharge ? "AE" : "S";
   const taxCategoryExtras = reverseCharge
     ? `<cbc:TaxExemptionReasonCode>VATEX-EU-IC</cbc:TaxExemptionReasonCode>
         <cbc:TaxExemptionReason>${escapeXml(B2B_VAT_EXEMPTION_NOTE)}</cbc:TaxExemptionReason>`
     : "";
-  const pricingLines = Array.isArray(booking.payment?.vatBreakdown) && booking.payment.vatBreakdown.length > 0
-    ? booking.payment.vatBreakdown.map((line: any) => ({
-        description: line.description,
-        price: line.netAmount,
-        vatRate: line.vatRate,
-        vatAmount: line.vatAmount,
-      }))
-    : Array.isArray(currentQuote?.pricingLines) && currentQuote.pricingLines.length > 0
-    ? currentQuote.pricingLines
-    : [{
-        description: booking.quote?.description || booking.rfqData?.description || "Service",
-        price: booking.payment?.netAmount ?? booking.payment?.amount ?? 0,
-        vatRate: booking.payment?.vatRate ?? 0,
-        vatAmount: booking.payment?.vatAmount ?? 0,
-      }];
-
-  const invoiceLines = pricingLines.map((line: any, index: number) => `
-    <cac:InvoiceLine>
-      <cbc:ID>${index + 1}</cbc:ID>
-      <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
-      <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:LineExtensionAmount>
-      <cac:Item>
-        <cbc:Description>${escapeXml(line.description)}</cbc:Description>
-        <cac:ClassifiedTaxCategory>
-          <cbc:ID>${taxCategoryId}</cbc:ID>
-          <cbc:Percent>${toMoney(line.vatRate ?? booking.payment?.vatRate ?? 0)}</cbc:Percent>
-          <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
-        </cac:ClassifiedTaxCategory>
-      </cac:Item>
-      <cac:Price>
-        <cbc:PriceAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:PriceAmount>
-      </cac:Price>
-    </cac:InvoiceLine>`).join("");
   const taxSubtotals = pricingLines.map((line: any) => `
     <cac:TaxSubtotal>
       <cbc:TaxableAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price || 0) * sign)}</cbc:TaxableAmount>
@@ -210,21 +231,8 @@ const buildUblInvoiceXml = (
       </cac:TaxCategory>
     </cac:TaxSubtotal>`).join("");
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
-  <cbc:CustomizationID>urn:cen.eu:en16931:2017</cbc:CustomizationID>
-  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
-  <cbc:ID>${escapeXml(invoiceNumber)}</cbc:ID>
-  <cbc:IssueDate>${issuedAt.toISOString().slice(0, 10)}</cbc:IssueDate>
-  <cbc:InvoiceTypeCode>${invoiceTypeCode}</cbc:InvoiceTypeCode>
-  <cbc:Note>${escapeXml(SELF_BILLING_NOTE)}</cbc:Note>
-  ${reverseCharge ? `<cbc:Note>${escapeXml(B2B_VAT_EXEMPTION_NOTE)}</cbc:Note>` : ""}
-  <cbc:DocumentCurrencyCode>${escapeXml(currency)}</cbc:DocumentCurrencyCode>
-  <cbc:BuyerReference>${escapeXml(booking.bookingNumber || booking._id?.toString?.())}</cbc:BuyerReference>
-  ${options?.relatedInvoiceNumber ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeXml(options.relatedInvoiceNumber)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>` : ""}
-  <cac:AccountingSupplierParty>
+  return {
+    supplierParty: `<cac:AccountingSupplierParty>
     <cac:Party>
       <cac:PartyName><cbc:Name>${escapeXml(professional.businessInfo?.companyName || professional.name || "Supplier")}</cbc:Name></cac:PartyName>${buildUblAddress({
         street: professional.businessInfo?.address,
@@ -240,8 +248,8 @@ const buildUblInvoiceXml = (
         <cbc:RegistrationName>${escapeXml(professional.businessInfo?.companyName || professional.name || "Supplier")}</cbc:RegistrationName>
       </cac:PartyLegalEntity>
     </cac:Party>
-  </cac:AccountingSupplierParty>
-  <cac:AccountingCustomerParty>
+  </cac:AccountingSupplierParty>`,
+    customerParty: `<cac:AccountingCustomerParty>
     <cac:Party>
       <cac:PartyName><cbc:Name>${escapeXml(customer.businessName || customer.name || "Customer")}</cbc:Name></cac:PartyName>${buildUblAddress({
         street: customer.companyAddress?.address || customer.location?.address,
@@ -257,17 +265,125 @@ const buildUblInvoiceXml = (
         <cbc:RegistrationName>${escapeXml(customer.businessName || customer.name || "Customer")}</cbc:RegistrationName>
       </cac:PartyLegalEntity>
     </cac:Party>
-  </cac:AccountingCustomerParty>
-  <cac:TaxTotal>
+  </cac:AccountingCustomerParty>`,
+    taxTotal: `<cac:TaxTotal>
     <cbc:TaxAmount currencyID="${escapeXml(currency)}">${toMoney(Number(booking.payment?.vatAmount || 0) * sign)}</cbc:TaxAmount>
     ${taxSubtotals}
-  </cac:TaxTotal>
-  <cac:LegalMonetaryTotal>
+  </cac:TaxTotal>`,
+    monetaryTotal: `<cac:LegalMonetaryTotal>
     <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${toMoney(Number(booking.payment?.netAmount ?? booking.payment?.amount) * sign)}</cbc:LineExtensionAmount>
     <cbc:TaxExclusiveAmount currencyID="${escapeXml(currency)}">${toMoney(Number(booking.payment?.netAmount ?? booking.payment?.amount) * sign)}</cbc:TaxExclusiveAmount>
     <cbc:TaxInclusiveAmount currencyID="${escapeXml(currency)}">${toMoney(Number(booking.payment?.totalWithVat) * sign)}</cbc:TaxInclusiveAmount>
     <cbc:PayableAmount currencyID="${escapeXml(currency)}">${toMoney(Number(booking.payment?.totalWithVat) * sign)}</cbc:PayableAmount>
-  </cac:LegalMonetaryTotal>${invoiceLines}
+  </cac:LegalMonetaryTotal>`,
+    taxCategoryId,
+  };
+};
+
+const buildUblCreditNoteXml = (
+  booking: any,
+  creditNoteNumber: string,
+  issuedAt: Date,
+  options?: { relatedInvoiceNumber?: string }
+): string => {
+  const currency = booking.payment?.currency || "EUR";
+  const sign = -1;
+  const reverseCharge = Boolean(booking.payment?.reverseCharge);
+  const pricingLines = getPricingLinesForUbl(booking);
+  const parties = buildUblPartiesAndTotals(booking, currency, sign, pricingLines, reverseCharge);
+  const creditNoteLines = pricingLines.map((line: any, index: number) => `
+    <cac:CreditNoteLine>
+      <cbc:ID>${index + 1}</cbc:ID>
+      <cbc:CreditedQuantity unitCode="C62">1</cbc:CreditedQuantity>
+      <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:LineExtensionAmount>
+      <cac:Item>
+        <cbc:Description>${escapeXml(line.description)}</cbc:Description>
+        <cac:ClassifiedTaxCategory>
+          <cbc:ID>${parties.taxCategoryId}</cbc:ID>
+          <cbc:Percent>${toMoney(line.vatRate ?? booking.payment?.vatRate ?? 0)}</cbc:Percent>
+          <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+        </cac:ClassifiedTaxCategory>
+      </cac:Item>
+      <cac:Price>
+        <cbc:PriceAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:PriceAmount>
+      </cac:Price>
+    </cac:CreditNoteLine>`).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:selfbilling:01:1.0</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:selfbilling:01:1.0</cbc:ProfileID>
+  <cbc:ID>${escapeXml(creditNoteNumber)}</cbc:ID>
+  <cbc:IssueDate>${issuedAt.toISOString().slice(0, 10)}</cbc:IssueDate>
+  <cbc:CreditNoteTypeCode>261</cbc:CreditNoteTypeCode>
+  <cbc:Note>${escapeXml(SELF_BILLING_NOTE)}</cbc:Note>
+  ${reverseCharge ? `<cbc:Note>${escapeXml(B2B_VAT_EXEMPTION_NOTE)}</cbc:Note>` : ""}
+  <cbc:DocumentCurrencyCode>${escapeXml(currency)}</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>${escapeXml(booking.bookingNumber || booking._id?.toString?.())}</cbc:BuyerReference>
+  ${options?.relatedInvoiceNumber ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeXml(options.relatedInvoiceNumber)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>` : ""}
+  ${parties.supplierParty}
+  ${parties.customerParty}
+  ${parties.taxTotal}
+  ${parties.monetaryTotal}${creditNoteLines}
+</CreditNote>`;
+};
+
+const buildUblInvoiceXml = (
+  booking: any,
+  invoiceNumber: string,
+  issuedAt: Date,
+  options?: { creditNote?: boolean; relatedInvoiceNumber?: string }
+): string => {
+  if (options?.creditNote) {
+    return buildUblCreditNoteXml(booking, invoiceNumber, issuedAt, {
+      relatedInvoiceNumber: options.relatedInvoiceNumber,
+    });
+  }
+
+  const currency = booking.payment?.currency || "EUR";
+  const sign = 1;
+  const reverseCharge = Boolean(booking.payment?.reverseCharge);
+  const invoiceTypeCode = "389";
+  const pricingLines = getPricingLinesForUbl(booking);
+  const parties = buildUblPartiesAndTotals(booking, currency, sign, pricingLines, reverseCharge);
+  const invoiceLines = pricingLines.map((line: any, index: number) => `
+    <cac:InvoiceLine>
+      <cbc:ID>${index + 1}</cbc:ID>
+      <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:LineExtensionAmount>
+      <cac:Item>
+        <cbc:Description>${escapeXml(line.description)}</cbc:Description>
+        <cac:ClassifiedTaxCategory>
+          <cbc:ID>${parties.taxCategoryId}</cbc:ID>
+          <cbc:Percent>${toMoney(line.vatRate ?? booking.payment?.vatRate ?? 0)}</cbc:Percent>
+          <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+        </cac:ClassifiedTaxCategory>
+      </cac:Item>
+      <cac:Price>
+        <cbc:PriceAmount currencyID="${escapeXml(currency)}">${toMoney(Number(line.price) * sign)}</cbc:PriceAmount>
+      </cac:Price>
+    </cac:InvoiceLine>`).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+  <cbc:ID>${escapeXml(invoiceNumber)}</cbc:ID>
+  <cbc:IssueDate>${issuedAt.toISOString().slice(0, 10)}</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>${invoiceTypeCode}</cbc:InvoiceTypeCode>
+  <cbc:Note>${escapeXml(SELF_BILLING_NOTE)}</cbc:Note>
+  ${reverseCharge ? `<cbc:Note>${escapeXml(B2B_VAT_EXEMPTION_NOTE)}</cbc:Note>` : ""}
+  <cbc:DocumentCurrencyCode>${escapeXml(currency)}</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>${escapeXml(booking.bookingNumber || booking._id?.toString?.())}</cbc:BuyerReference>
+  ${options?.relatedInvoiceNumber ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeXml(options.relatedInvoiceNumber)}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>` : ""}
+  ${parties.supplierParty}
+  ${parties.customerParty}
+  ${parties.taxTotal}
+  ${parties.monetaryTotal}${invoiceLines}
 </Invoice>`;
 };
 
@@ -277,7 +393,11 @@ const loadBookingForInvoice = async (bookingId: string) =>
     .populate("professional")
     .populate("project", "title extraOptions subprojects");
 
-export async function ensureBookingInvoiceArtifacts(bookingId: string): Promise<InvoiceArtifactResult | null> {
+export async function ensureBookingInvoiceArtifacts(
+  bookingId: string,
+  paymentId?: string
+): Promise<InvoiceArtifactResult | null> {
+  await clearStaleGenerationClaimsIfNeeded(bookingId);
   const existing = await Booking.findById(bookingId);
   if (!existing?.payment) return null;
   if (hasInvoiceArtifacts(existing.payment)) {
@@ -349,10 +469,7 @@ export async function ensureBookingInvoiceArtifacts(bookingId: string): Promise<
       }
     );
 
-    await Payment.findOneAndUpdate(
-      { booking: booking._id },
-      { $set: update }
-    );
+    await persistPaymentArtifactUpdate(booking._id, paymentId, update);
 
     return update;
   } catch (error) {
@@ -361,7 +478,11 @@ export async function ensureBookingInvoiceArtifacts(bookingId: string): Promise<
   }
 }
 
-export async function ensureCreditInvoiceArtifacts(bookingId: string): Promise<CreditArtifactResult | null> {
+export async function ensureCreditInvoiceArtifacts(
+  bookingId: string,
+  paymentId?: string
+): Promise<CreditArtifactResult | null> {
+  await clearStaleGenerationClaimsIfNeeded(bookingId);
   const existing = await Booking.findById(bookingId);
   if (!existing?.payment?.invoiceNumber) {
     return null;
@@ -443,10 +564,7 @@ export async function ensureCreditInvoiceArtifacts(bookingId: string): Promise<C
       }
     );
 
-    await Payment.findOneAndUpdate(
-      { booking: booking._id },
-      { $set: update }
-    );
+    await persistPaymentArtifactUpdate(booking._id, paymentId, update);
 
     return {
       creditNoteNumber,

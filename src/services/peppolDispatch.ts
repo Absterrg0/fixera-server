@@ -187,7 +187,6 @@ const dispatchWithRetries = async (
           provider,
           reference,
           reason: lastReason,
-          dispatchedAt: new Date(),
           response: parsed,
           attempts,
         };
@@ -214,7 +213,6 @@ const dispatchWithRetries = async (
         provider,
         reference,
         reason: lastReason,
-        dispatchedAt: new Date(),
         response: lastResponse,
         attempts,
       };
@@ -226,7 +224,6 @@ const dispatchWithRetries = async (
     provider,
     reference,
     reason: lastReason,
-    dispatchedAt: new Date(),
     response: lastResponse,
     attempts,
   };
@@ -260,7 +257,6 @@ export async function maybeDispatchPeppolInvoice(params: {
       provider,
       reference,
       reason: "UBL artifact stored; manual Peppol dispatch required",
-      dispatchedAt,
       attempts: 0,
     };
   }
@@ -283,7 +279,6 @@ export async function maybeDispatchPeppolInvoice(params: {
       provider,
       reference,
       reason: `${provider} Peppol endpoint/API key is not configured`,
-      dispatchedAt,
       attempts: 0,
     };
   }
