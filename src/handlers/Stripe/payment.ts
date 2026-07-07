@@ -123,6 +123,19 @@ const getQuotePricingVatCalculation = (booking: any, amount: number) => {
   const pricingLines = Array.isArray(currentVersion?.pricingLines)
     ? currentVersion.pricingLines
     : [];
+  if (pricingLines.length === 0) {
+    return null;
+  }
+  const hasCompleteVatMetadata = pricingLines.every((line: any) =>
+    Number.isFinite(Number(line.price)) &&
+    Number(line.price) > 0 &&
+    Number.isFinite(Number(line.vatRate)) &&
+    Number(line.vatRate) >= 0 &&
+    Number(line.vatRate) <= 100
+  );
+  if (!hasCompleteVatMetadata) {
+    return null;
+  }
   return calculateVatFromPricingLines(pricingLines, amount);
 };
 
@@ -450,6 +463,7 @@ export const createPaymentIntent = async (
           amount: discountedQuoteAmount,
           customerCountry: customer.location?.country || 'BE',
           customerVATNumber: customer.isVatVerified ? customer.vatNumber || null : null,
+          customerVatVerified: customer.isVatVerified === true,
           professionalCountry: professional.businessInfo?.country || 'BE',
           customerType: customer.customerType || 'individual',
         });

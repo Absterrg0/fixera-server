@@ -326,7 +326,7 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
 
       for (const discount of data.discounts || []) {
         const discountAmountLabel = discount.amount < 0
-          ? formatCurrency(discount.amount, data.payment.currency)
+          ? formatCurrency(Math.abs(discount.amount), data.payment.currency)
           : `-${formatCurrency(Math.abs(discount.amount), data.payment.currency)}`;
         doc
           .text(discount.label, 50, rowY)
@@ -413,7 +413,7 @@ export async function generateBookingInvoice(
 
   const customer = booking.customer;
   const professional = booking.professional;
-  const customerCountry = customer.location?.country || "BE";
+  const customerCountry = customer.companyAddress?.country || customer.location?.country || "BE";
   const settings = await PlatformSettings.getCurrentConfig();
   const currentQuote = booking.quoteVersions?.find((quote) => quote.version === booking.currentQuoteVersion)
     || booking.quoteVersions?.[booking.quoteVersions.length - 1];

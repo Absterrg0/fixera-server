@@ -32,6 +32,94 @@ const escapeXml = (value: unknown): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
+const hasInvoiceArtifacts = (payment: any) =>
+  Boolean(payment?.invoiceNumber && payment?.invoiceUrl && !String(payment.invoiceNumber).startsWith("GENERATING-"));
+
+const hasCreditNoteArtifacts = (payment: any) =>
+  Boolean(payment?.creditNoteNumber && payment?.creditNoteUrl && !String(payment.creditNoteNumber).startsWith("GENERATING-CN-"));
+
+const toInvoiceArtifactResult = (payment: any): InvoiceArtifactResult => ({
+  invoiceNumber: payment.invoiceNumber,
+  invoiceUrl: payment.invoiceUrl,
+  invoiceUblUrl: payment.invoiceUblUrl,
+  invoiceGeneratedAt: payment.invoiceGeneratedAt || new Date(),
+  peppolDispatchStatus: payment.peppolDispatchStatus,
+  peppolDispatchReference: payment.peppolDispatchReference,
+});
+
+const toCreditArtifactResult = (payment: any): CreditArtifactResult => ({
+  creditNoteNumber: payment.creditNoteNumber,
+  creditNoteUrl: payment.creditNoteUrl,
+  creditNoteUblUrl: payment.creditNoteUblUrl,
+  creditNoteGeneratedAt: payment.creditNoteGeneratedAt || new Date(),
+  relatedInvoiceNumber: payment.invoiceNumber,
+});
+
+const claimInvoiceGeneration = async (bookingId: string) =>
+  Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      $and: [
+        {
+          $or: [
+            { "payment.invoiceNumber": { $exists: false } },
+            { "payment.invoiceNumber": null },
+            { "payment.invoiceNumber": "" },
+          ],
+        },
+        {
+          $or: [
+            { "payment.invoiceUrl": { $exists: false } },
+            { "payment.invoiceUrl": null },
+            { "payment.invoiceUrl": "" },
+          ],
+        },
+      ],
+    },
+    { $set: { "payment.invoiceNumber": `GENERATING-${Date.now()}` } },
+    { new: true }
+  );
+
+const claimCreditNoteGeneration = async (bookingId: string) =>
+  Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      "payment.invoiceNumber": { $exists: true, $nin: [null, ""] },
+      $and: [
+        {
+          $or: [
+            { "payment.creditNoteNumber": { $exists: false } },
+            { "payment.creditNoteNumber": null },
+            { "payment.creditNoteNumber": "" },
+          ],
+        },
+        {
+          $or: [
+            { "payment.creditNoteUrl": { $exists: false } },
+            { "payment.creditNoteUrl": null },
+            { "payment.creditNoteUrl": "" },
+          ],
+        },
+      ],
+    },
+    { $set: { "payment.creditNoteNumber": `GENERATING-CN-${Date.now()}` } },
+    { new: true }
+  );
+
+const clearInvoiceGenerationClaim = async (bookingId: string) => {
+  await Booking.updateOne(
+    { _id: bookingId, "payment.invoiceNumber": /^GENERATING-/ },
+    { $unset: { "payment.invoiceNumber": "" } }
+  );
+};
+
+const clearCreditNoteGenerationClaim = async (bookingId: string) => {
+  await Booking.updateOne(
+    { _id: bookingId, "payment.creditNoteNumber": /^GENERATING-CN-/ },
+    { $unset: { "payment.creditNoteNumber": "" } }
+  );
+};
+
 const toMoney = (value: unknown): string => {
   const amount = Number(value);
   return (Number.isFinite(amount) ? amount : 0).toFixed(2);
@@ -192,160 +280,179 @@ const loadBookingForInvoice = async (bookingId: string) =>
 export async function ensureBookingInvoiceArtifacts(bookingId: string): Promise<InvoiceArtifactResult | null> {
   const existing = await Booking.findById(bookingId);
   if (!existing?.payment) return null;
-  if (existing.payment.invoiceNumber && existing.payment.invoiceUrl) {
-    return {
-      invoiceNumber: existing.payment.invoiceNumber,
-      invoiceUrl: existing.payment.invoiceUrl,
-      invoiceUblUrl: existing.payment.invoiceUblUrl,
-      invoiceGeneratedAt: existing.payment.invoiceGeneratedAt || new Date(),
-      peppolDispatchStatus: existing.payment.peppolDispatchStatus,
-      peppolDispatchReference: existing.payment.peppolDispatchReference,
-    };
+  if (hasInvoiceArtifacts(existing.payment)) {
+    return toInvoiceArtifactResult(existing.payment);
   }
 
-  const booking = await loadBookingForInvoice(bookingId);
-  if (!booking?.payment) return null;
-
-  const { invoiceNumber, pdfBuffer } = await generateBookingInvoice(booking as any);
-  const generatedAt = new Date();
-  const keyBase = `invoices/${booking._id.toString()}/${invoiceNumber}`;
-  const invoiceUrl = await uploadBufferToS3(
-    pdfBuffer,
-    `${keyBase}.pdf`,
-    "application/pdf",
-    `inline; filename="${invoiceNumber}.pdf"`
-  );
-  const ublXml = buildUblInvoiceXml(booking, invoiceNumber, generatedAt);
-  const invoiceUblUrl = await uploadBufferToS3(
-    Buffer.from(ublXml, "utf8"),
-    `${keyBase}.xml`,
-    "application/xml",
-    `attachment; filename="${invoiceNumber}.xml"`
-  );
-
-  const peppolResult = await maybeDispatchPeppolInvoice({
-    booking,
-    invoiceNumber,
-    ublXml,
-    invoiceUblUrl,
-  });
-
-  const update = {
-    invoiceNumber,
-    invoiceUrl,
-    invoiceUblUrl,
-    invoiceGeneratedAt: generatedAt,
-    peppolDispatchStatus: peppolResult.status,
-    peppolDispatchReference: peppolResult.reference,
-    peppolDispatchedAt: peppolResult.dispatchedAt,
-  };
-
-  await Booking.updateOne(
-    { _id: booking._id },
-    {
-      $set: {
-        "payment.invoiceNumber": update.invoiceNumber,
-        "payment.invoiceUrl": update.invoiceUrl,
-        "payment.invoiceUblUrl": update.invoiceUblUrl,
-        "payment.invoiceGeneratedAt": update.invoiceGeneratedAt,
-        "payment.peppolDispatchStatus": update.peppolDispatchStatus,
-        "payment.peppolDispatchReference": update.peppolDispatchReference,
-        "payment.peppolDispatchedAt": update.peppolDispatchedAt,
-      },
+  const claimed = await claimInvoiceGeneration(bookingId);
+  if (!claimed) {
+    const refreshed = await Booking.findById(bookingId);
+    if (refreshed?.payment && hasInvoiceArtifacts(refreshed.payment)) {
+      return toInvoiceArtifactResult(refreshed.payment);
     }
-  );
-
-  await Payment.findOneAndUpdate(
-    { booking: booking._id },
-    { $set: update }
-  );
-
-  return update;
-}
-
-export async function ensureCreditInvoiceArtifacts(bookingId: string): Promise<CreditArtifactResult | null> {
-  const booking = await loadBookingForInvoice(bookingId);
-  if (!booking?.payment?.invoiceNumber) {
     return null;
   }
 
-  if (booking.payment.creditNoteNumber && booking.payment.creditNoteUrl) {
-    return {
-      creditNoteNumber: booking.payment.creditNoteNumber,
-      creditNoteUrl: booking.payment.creditNoteUrl,
-      creditNoteUblUrl: booking.payment.creditNoteUblUrl,
-      creditNoteGeneratedAt: booking.payment.creditNoteGeneratedAt || new Date(),
-      relatedInvoiceNumber: booking.payment.invoiceNumber,
+  try {
+    const booking = await loadBookingForInvoice(bookingId);
+    if (!booking?.payment) return null;
+
+    const { invoiceNumber, pdfBuffer } = await generateBookingInvoice(booking as any);
+    const generatedAt = new Date();
+    const keyBase = `invoices/${booking._id.toString()}/${invoiceNumber}`;
+    const invoiceUrl = await uploadBufferToS3(
+      pdfBuffer,
+      `${keyBase}.pdf`,
+      "application/pdf",
+      `inline; filename="${invoiceNumber}.pdf"`
+    );
+    const ublXml = buildUblInvoiceXml(booking, invoiceNumber, generatedAt);
+    const invoiceUblUrl = await uploadBufferToS3(
+      Buffer.from(ublXml, "utf8"),
+      `${keyBase}.xml`,
+      "application/xml",
+      `attachment; filename="${invoiceNumber}.xml"`
+    );
+
+    const peppolResult = await maybeDispatchPeppolInvoice({
+      booking,
+      invoiceNumber,
+      ublXml,
+      invoiceUblUrl,
+    });
+
+    const update = {
+      invoiceNumber,
+      invoiceUrl,
+      invoiceUblUrl,
+      invoiceGeneratedAt: generatedAt,
+      peppolDispatchStatus: peppolResult.status,
+      peppolDispatchReference: peppolResult.reference,
+      peppolDispatchedAt: peppolResult.dispatchedAt,
     };
+
+    await Booking.updateOne(
+      { _id: booking._id },
+      {
+        $set: {
+          "payment.invoiceNumber": update.invoiceNumber,
+          "payment.invoiceUrl": update.invoiceUrl,
+          "payment.invoiceUblUrl": update.invoiceUblUrl,
+          "payment.invoiceGeneratedAt": update.invoiceGeneratedAt,
+          "payment.peppolDispatchStatus": update.peppolDispatchStatus,
+          "payment.peppolDispatchReference": update.peppolDispatchReference,
+          "payment.peppolDispatchedAt": update.peppolDispatchedAt,
+        },
+      }
+    );
+
+    await Payment.findOneAndUpdate(
+      { booking: booking._id },
+      { $set: update }
+    );
+
+    return update;
+  } catch (error) {
+    await clearInvoiceGenerationClaim(bookingId);
+    throw error;
+  }
+}
+
+export async function ensureCreditInvoiceArtifacts(bookingId: string): Promise<CreditArtifactResult | null> {
+  const existing = await Booking.findById(bookingId);
+  if (!existing?.payment?.invoiceNumber) {
+    return null;
+  }
+  if (hasCreditNoteArtifacts(existing.payment)) {
+    return toCreditArtifactResult(existing.payment);
   }
 
-  const relatedInvoiceNumber = booking.payment.invoiceNumber;
-  const { invoiceNumber: creditNoteNumber, pdfBuffer } = await generateBookingInvoice(booking as any, {
-    creditNote: true,
-    relatedInvoiceNumber,
-  });
-  const generatedAt = new Date();
-  const keyBase = `invoices/${booking._id.toString()}/${creditNoteNumber}`;
-  const creditNoteUrl = await uploadBufferToS3(
-    pdfBuffer,
-    `${keyBase}.pdf`,
-    "application/pdf",
-    `inline; filename="${creditNoteNumber}.pdf"`
-  );
-  const ublXml = buildUblInvoiceXml(booking, creditNoteNumber, generatedAt, {
-    creditNote: true,
-    relatedInvoiceNumber,
-  });
-  const creditNoteUblUrl = await uploadBufferToS3(
-    Buffer.from(ublXml, "utf8"),
-    `${keyBase}.xml`,
-    "application/xml",
-    `attachment; filename="${creditNoteNumber}.xml"`
-  );
-
-  const peppolResult = await maybeDispatchPeppolInvoice({
-    booking,
-    invoiceNumber: creditNoteNumber,
-    ublXml,
-    invoiceUblUrl: creditNoteUblUrl,
-    documentType: "credit_note",
-  });
-
-  const update = {
-    creditNoteNumber,
-    creditNoteUrl,
-    creditNoteUblUrl,
-    creditNoteGeneratedAt: generatedAt,
-    creditNoteRelatedInvoiceNumber: relatedInvoiceNumber,
-    creditNotePeppolDispatchStatus: peppolResult.status,
-    creditNotePeppolDispatchReference: peppolResult.reference,
-  };
-
-  await Booking.updateOne(
-    { _id: booking._id },
-    {
-      $set: {
-        "payment.creditNoteNumber": update.creditNoteNumber,
-        "payment.creditNoteUrl": update.creditNoteUrl,
-        "payment.creditNoteUblUrl": update.creditNoteUblUrl,
-        "payment.creditNoteGeneratedAt": update.creditNoteGeneratedAt,
-        "payment.creditNoteRelatedInvoiceNumber": update.creditNoteRelatedInvoiceNumber,
-        "payment.creditNotePeppolDispatchStatus": update.creditNotePeppolDispatchStatus,
-        "payment.creditNotePeppolDispatchReference": update.creditNotePeppolDispatchReference,
-      },
+  const claimed = await claimCreditNoteGeneration(bookingId);
+  if (!claimed) {
+    const refreshed = await Booking.findById(bookingId);
+    if (refreshed?.payment && hasCreditNoteArtifacts(refreshed.payment)) {
+      return toCreditArtifactResult(refreshed.payment);
     }
-  );
+    return null;
+  }
 
-  await Payment.findOneAndUpdate(
-    { booking: booking._id },
-    { $set: update }
-  );
+  try {
+    const booking = await loadBookingForInvoice(bookingId);
+    if (!booking?.payment?.invoiceNumber) {
+      return null;
+    }
 
-  return {
-    creditNoteNumber,
-    creditNoteUrl,
-    creditNoteUblUrl,
-    creditNoteGeneratedAt: generatedAt,
-    relatedInvoiceNumber,
-  };
+    const relatedInvoiceNumber = booking.payment.invoiceNumber;
+    const { invoiceNumber: creditNoteNumber, pdfBuffer } = await generateBookingInvoice(booking as any, {
+      creditNote: true,
+      relatedInvoiceNumber,
+    });
+    const generatedAt = new Date();
+    const keyBase = `invoices/${booking._id.toString()}/${creditNoteNumber}`;
+    const creditNoteUrl = await uploadBufferToS3(
+      pdfBuffer,
+      `${keyBase}.pdf`,
+      "application/pdf",
+      `inline; filename="${creditNoteNumber}.pdf"`
+    );
+    const ublXml = buildUblInvoiceXml(booking, creditNoteNumber, generatedAt, {
+      creditNote: true,
+      relatedInvoiceNumber,
+    });
+    const creditNoteUblUrl = await uploadBufferToS3(
+      Buffer.from(ublXml, "utf8"),
+      `${keyBase}.xml`,
+      "application/xml",
+      `attachment; filename="${creditNoteNumber}.xml"`
+    );
+
+    const peppolResult = await maybeDispatchPeppolInvoice({
+      booking,
+      invoiceNumber: creditNoteNumber,
+      ublXml,
+      invoiceUblUrl: creditNoteUblUrl,
+      documentType: "credit_note",
+    });
+
+    const update = {
+      creditNoteNumber,
+      creditNoteUrl,
+      creditNoteUblUrl,
+      creditNoteGeneratedAt: generatedAt,
+      creditNoteRelatedInvoiceNumber: relatedInvoiceNumber,
+      creditNotePeppolDispatchStatus: peppolResult.status,
+      creditNotePeppolDispatchReference: peppolResult.reference,
+    };
+
+    await Booking.updateOne(
+      { _id: booking._id },
+      {
+        $set: {
+          "payment.creditNoteNumber": update.creditNoteNumber,
+          "payment.creditNoteUrl": update.creditNoteUrl,
+          "payment.creditNoteUblUrl": update.creditNoteUblUrl,
+          "payment.creditNoteGeneratedAt": update.creditNoteGeneratedAt,
+          "payment.creditNoteRelatedInvoiceNumber": update.creditNoteRelatedInvoiceNumber,
+          "payment.creditNotePeppolDispatchStatus": update.creditNotePeppolDispatchStatus,
+          "payment.creditNotePeppolDispatchReference": update.creditNotePeppolDispatchReference,
+        },
+      }
+    );
+
+    await Payment.findOneAndUpdate(
+      { booking: booking._id },
+      { $set: update }
+    );
+
+    return {
+      creditNoteNumber,
+      creditNoteUrl,
+      creditNoteUblUrl,
+      creditNoteGeneratedAt: generatedAt,
+      relatedInvoiceNumber,
+    };
+  } catch (error) {
+    await clearCreditNoteGenerationClaim(bookingId);
+    throw error;
+  }
 }

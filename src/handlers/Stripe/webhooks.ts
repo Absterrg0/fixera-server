@@ -258,14 +258,12 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       }
     );
 
-    try {
-      await ensureBookingInvoiceArtifacts(booking._id.toString());
-    } catch (invoiceError: any) {
+    void ensureBookingInvoiceArtifacts(booking._id.toString()).catch((invoiceError: any) => {
       console.error(
         `[WEBHOOK] Payment authorized for booking ${bookingId}, but invoice generation failed:`,
         invoiceError?.message || invoiceError
       );
-    }
+    });
 
     // Deduct points now that payment is confirmed
     const pointsRedeemed = (booking.payment as any)?.discount?.pointsRedeemed;

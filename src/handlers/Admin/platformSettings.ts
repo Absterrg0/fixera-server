@@ -75,8 +75,17 @@ export const updatePlatformSettings = async (req: Request, res: Response, next: 
       };
     }
     if (eInvoicing && typeof eInvoicing === 'object') {
+      if (eInvoicing.peppolEnabled !== undefined && typeof eInvoicing.peppolEnabled !== 'boolean') {
+        return res.status(400).json({ success: false, msg: 'peppolEnabled must be a boolean' });
+      }
+      if (
+        eInvoicing.provider !== undefined &&
+        !['odoo', 'billit', 'manual'].includes(String(eInvoicing.provider))
+      ) {
+        return res.status(400).json({ success: false, msg: 'Invalid e-invoicing provider' });
+      }
       config.eInvoicing = {
-        peppolEnabled: Boolean(eInvoicing.peppolEnabled),
+        peppolEnabled: eInvoicing.peppolEnabled === true,
         provider: ['odoo', 'billit', 'manual'].includes(eInvoicing.provider) ? eInvoicing.provider : 'manual',
         peppolParticipantId: typeof eInvoicing.peppolParticipantId === 'string'
           ? eInvoicing.peppolParticipantId.trim()
