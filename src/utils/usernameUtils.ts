@@ -5,7 +5,7 @@ const COMPANY_SUFFIXES = [
 ];
 
 const RESERVED_USERNAMES = [
-    'admin', 'fixera', 'support', 'help', 'staff', 'system',
+    'admin', 'fixtract', 'support', 'help', 'staff', 'system',
     'moderator', 'null', 'undefined', 'api', 'www', 'mail',
     'contact', 'info', 'billing', 'security', 'root'
 ];

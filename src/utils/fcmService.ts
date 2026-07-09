@@ -14,7 +14,7 @@ import { getTokensForCurrentDeployment } from './fcmTokenUtils';
 // Firebase Admin Initialisation (lazy singleton)
 // ------------------------------------------------------------------
 
-const FIREBASE_APP_NAME = 'fixera-fcm';
+const FIREBASE_APP_NAME = 'fixtract-fcm';
 const FCM_NOT_CONFIGURED = 'FCM not configured';
 
 function isFcmNotConfiguredError(err: unknown): boolean {
@@ -173,9 +173,9 @@ function buildMulticastMessage(
       notification: {
         title: payload.title,
         body: payload.body,
-        icon: '/fixera-logo.png',
-        badge: '/fixera-logo.png',
-        tag: payload.type || 'fixera-notification',
+        icon: '/fixtract-logo.png',
+        badge: '/fixtract-logo.png',
+        tag: payload.type || 'fixtract-notification',
         data: { url: clickUrl },
       },
       fcmOptions: { link: clickUrl },

@@ -300,8 +300,8 @@ const buildOdooMoveVals = async (
     payment_reference: payload.invoiceNumber,
     invoice_origin: booking.bookingNumber || booking._id?.toString?.(),
     narration: [
-      "Imported from Fixera.",
-      payload.ublUrl ? `Fixera UBL: ${payload.ublUrl}` : undefined,
+      "Imported from Fixtract.",
+      payload.ublUrl ? `Fixtract UBL: ${payload.ublUrl}` : undefined,
       payload.peppolParticipantId ? `Peppol participant: ${payload.peppolParticipantId}` : undefined,
     ].filter(Boolean).join("\n"),
     ...(config.salesJournalId ? { journal_id: config.salesJournalId } : {}),

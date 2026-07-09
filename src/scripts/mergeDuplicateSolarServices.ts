@@ -14,7 +14,7 @@ const DUPLICATE_NAMES = [
 const CANONICAL_NAME = "Solar PV & Battery Storage";
 
 async function mergeDuplicateSolarServices() {
-  const mongoURI = process.env.MONGODB_URI || "mongodb://localhost:27017/fixera";
+  const mongoURI = process.env.MONGODB_URI || "mongodb://localhost:27017/fixtract";
   await mongoose.connect(mongoURI);
 
   const session = await mongoose.startSession();

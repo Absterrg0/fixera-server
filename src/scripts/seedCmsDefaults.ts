@@ -17,11 +17,11 @@ interface DefaultPolicy {
 const DEFAULTS: DefaultPolicy[] = [
   {
     slug: "about",
-    title: "About Fixera",
+    title: "About Fixtract",
     excerpt:
-      "Fixera connects homeowners with vetted professionals for reliable, transparent home services.",
+      "Fixtract connects homeowners with vetted professionals for reliable, transparent home services.",
     body: `<h2>Who we are</h2>
-<p>Fixera is a marketplace that connects homeowners and businesses with vetted professionals for home services — from plumbing and electrical to solar installations and renovations. We built Fixera to make hiring trades honest, fast, and transparent.</p>
+<p>Fixtract is a marketplace that connects homeowners and businesses with vetted professionals for home services — from plumbing and electrical to solar installations and renovations. We built Fixtract to make hiring trades honest, fast, and transparent.</p>
 
 <h2>What we do</h2>
 <p>We verify every professional on the platform, standardize quoting and invoicing, hold payments in escrow until work is complete, and back every job with a warranty and dispute process. Customers get reliable pros; professionals get a steady flow of serious work.</p>
@@ -37,18 +37,18 @@ const DEFAULTS: DefaultPolicy[] = [
 <h2>Contact</h2>
 <p>Questions or feedback? Reach us through the <a href="/chat">support chat</a> — we read every message.</p>`,
     seo: {
-      titleTag: "About Fixera — Vetted Home Service Professionals",
+      titleTag: "About Fixtract — Vetted Home Service Professionals",
       metaDescription:
-        "Learn how Fixera connects homeowners with vetted professionals for plumbing, electrical, solar, and more — with transparent pricing and warranty-backed work.",
+        "Learn how Fixtract connects homeowners with vetted professionals for plumbing, electrical, solar, and more — with transparent pricing and warranty-backed work.",
     },
   },
   {
     slug: "privacy-policy",
     title: "Privacy Policy",
     excerpt:
-      "How Fixera collects, uses, and protects your personal information.",
+      "How Fixtract collects, uses, and protects your personal information.",
     body: `<h2>1. Information we collect</h2>
-<p>We collect information you provide directly (name, email, phone, address, payment details) and information generated through your use of Fixera (bookings, messages, reviews, device and usage data).</p>
+<p>We collect information you provide directly (name, email, phone, address, payment details) and information generated through your use of Fixtract (bookings, messages, reviews, device and usage data).</p>
 
 <h2>2. How we use your information</h2>
 <ul>
@@ -59,7 +59,7 @@ const DEFAULTS: DefaultPolicy[] = [
 </ul>
 
 <h2>3. Sharing your information</h2>
-<p>We share information with professionals you book, payment processors (Stripe), identity-verification partners, and service providers that help us run Fixera. We do not sell your personal information.</p>
+<p>We share information with professionals you book, payment processors (Stripe), identity-verification partners, and service providers that help us run Fixtract. We do not sell your personal information.</p>
 
 <h2>4. Your rights</h2>
 <p>You can access, correct, export, or delete your personal data from your account settings, or by contacting us. If you are in the EU/UK, you also have rights under GDPR including the right to object to processing.</p>
@@ -71,11 +71,11 @@ const DEFAULTS: DefaultPolicy[] = [
 <p>We use industry-standard measures to protect your data, including encryption in transit, access controls, and regular security reviews. No system is perfectly secure — please use a strong password and keep your credentials private.</p>
 
 <h2>7. Contact</h2>
-<p>Questions about this policy? Reach us through the <a href="/chat">support chat</a> or email <a href="mailto:privacy@fixera.com">privacy@fixera.com</a>.</p>`,
+<p>Questions about this policy? Reach us through the <a href="/chat">support chat</a> or email <a href="mailto:privacy@fixtract.com">privacy@fixtract.com</a>.</p>`,
     seo: {
-      titleTag: "Privacy Policy — Fixera",
+      titleTag: "Privacy Policy — Fixtract",
       metaDescription:
-        "How Fixera collects, uses, and protects your personal information, and the rights you have over your data.",
+        "How Fixtract collects, uses, and protects your personal information, and the rights you have over your data.",
     },
   },
 ];

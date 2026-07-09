@@ -256,7 +256,7 @@ export interface IBooking extends Document {
     // Multi-currency support
     originalCurrency?: string;
     fxRate?: number;
-    fxProvider?: 'stripe' | 'fixera';
+    fxProvider?: 'stripe' | 'fixtract';
 
     // Payment timeline
     authorizedAt?: Date;
@@ -841,7 +841,7 @@ const BookingSchema = new Schema({
     fxRate: { type: Number },
     fxProvider: {
       type: String,
-      enum: ['stripe', 'fixera']
+      enum: ['stripe', 'fixtract']
     },
 
     // Payment timeline

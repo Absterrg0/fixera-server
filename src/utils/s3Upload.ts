@@ -15,7 +15,7 @@ const s3Client = new S3Client({
   },
 });
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'fixera-uploads';
+const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'abby-fixera';
 
 const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 

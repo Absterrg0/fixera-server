@@ -1075,7 +1075,7 @@ export const exportKpiCsv = async (req: Request, res: Response) => {
 
     let headers: string[] = [];
     let rows: unknown[][] = [];
-    const filename = `fixera-kpi-${section}-${dateSlug}.${format === 'xlsx' ? 'xlsx' : 'csv'}`;
+    const filename = `fixtract-kpi-${section}-${dateSlug}.${format === 'xlsx' ? 'xlsx' : 'csv'}`;
 
     type Row = Record<string, number | string | null | undefined>;
     if (section === 'region') {

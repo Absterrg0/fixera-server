@@ -1,4 +1,4 @@
-//fixera-server/src/handlers/Project/index.ts
+//fixtract-server/src/handlers/Project/index.ts
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Project from "../../models/project";

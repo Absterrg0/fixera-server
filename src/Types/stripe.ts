@@ -1,5 +1,5 @@
 /**
- * Stripe-related TypeScript types for Fixera Platform
+ * Stripe-related TypeScript types for Fixtract Platform
  * Version: 2.1
  */
 
@@ -89,7 +89,7 @@ export interface BookingPayment {
   // Multi-currency support
   originalCurrency?: string;
   fxRate?: number;
-  fxProvider?: 'stripe' | 'fixera';
+  fxProvider?: 'stripe' | 'fixtract';
 
   // Timestamps
   authorizedAt?: Date;

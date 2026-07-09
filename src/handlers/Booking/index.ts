@@ -1568,7 +1568,7 @@ export const cancelBooking = async (req: Request, res: Response, next: NextFunct
     return res.status(201).json({
       success: true,
       msg: isCustomer
-        ? "Refund request sent to the professional. They have 5 business days to respond before it escalates to Fixera."
+        ? "Refund request sent to the professional. They have 5 business days to respond before it escalates to Fixtract."
         : "Cancellation request submitted for admin review",
       cancellationRequest,
     });

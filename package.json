@@ -1,5 +1,5 @@
 {
-  "name": "fixera-server",
+  "name": "fixtract-server",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -14,11 +14,13 @@
     "seed:csv": "npx tsx src/scripts/parseAndImportCSV.ts",
     "migrate:merge-solar": "npx tsx src/scripts/mergeDuplicateSolarServices.ts",
     "migrate:fix-conversation-indexes": "npx tsx src/scripts/fixConversationIndexes.ts",
-    "migrate:fix-invoice-sequence-indexes": "npx tsx src/scripts/fixInvoiceSequenceIndexes.ts"
+    "migrate:fix-invoice-sequence-indexes": "npx tsx src/scripts/fixInvoiceSequenceIndexes.ts",
+    "migrate:fixera-to-fixtract": "npx tsx src/scripts/migrateFixeraToFixtract.ts",
+    "rollback:fixtract-to-fixera": "npx tsx src/scripts/rollbackFixtractToFixera.ts"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pankaj3399/fixera-server.git"
+    "url": "git+https://github.com/pankaj3399/fixtract-server.git"
   },
   "keywords": [],
   "author": "",

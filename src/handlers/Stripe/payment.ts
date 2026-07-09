@@ -504,7 +504,7 @@ export const createPaymentIntent = async (
         professional.stripe.accountId,
         STRIPE_CONFIG.environment as 'production' | 'test'
       ),
-      description: `Fixera Booking #${booking.bookingNumber} - ${projectInfo?.title || 'Service'}`,
+      description: `Fixtract Booking #${booking.bookingNumber} - ${projectInfo?.title || 'Service'}`,
     }, {
       idempotencyKey: generateIdempotencyKey({
         bookingId: booking._id.toString(),
@@ -683,7 +683,7 @@ export const confirmPayment = async (req: Request, res: Response) => {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status === 'succeeded') {
-      // Payment charged successfully — funds in Fixera's Stripe account
+      // Payment charged successfully — funds in Fixtract's Stripe account
       console.log(`[PAYMENT CONFIRM] PaymentIntent status is succeeded, updating booking`);
 
       const now = new Date();
@@ -793,7 +793,7 @@ export const captureAndTransferPayment = async (bookingId: string): Promise<{ su
 
     console.log(`Transferring payment for booking ${booking._id} (already captured)`);
 
-    // Step 2: Transfer to professional (money goes from Fixera -> Professional)
+    // Step 2: Transfer to professional (money goes from Fixtract -> Professional)
     const payoutMajorAmount = Number(
       booking.payment.professionalPayout ?? booking.payment.totalWithVat ?? booking.payment.amount ?? 0
     );

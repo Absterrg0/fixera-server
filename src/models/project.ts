@@ -26,7 +26,7 @@ export interface IIntakeMeeting {
 }
 
 export interface IRenovationPlanning {
-  fixeraManaged: boolean;
+  fixtractManaged: boolean;
   resources: string[];
 }
 
@@ -325,7 +325,7 @@ const IntakeMeetingSchema = new Schema<IIntakeMeeting>({
 
 // Renovation Planning Schema
 const RenovationPlanningSchema = new Schema<IRenovationPlanning>({
-  fixeraManaged: { type: Boolean, default: false },
+  fixtractManaged: { type: Boolean, default: false },
   resources: [{ type: String }],
 });
 

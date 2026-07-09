@@ -150,7 +150,7 @@ export const createConnectAccount = async (req: Request, res: Response) => {
       metadata: {
         userId: user._id.toString(),
         professionalId: user.professionalId || user._id.toString(),
-        platform: 'fixera',
+        platform: 'fixtract',
         environment: STRIPE_CONFIG.environment,
       },
     });

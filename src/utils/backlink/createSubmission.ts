@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import BacklinkConfig from '../../models/backlinkConfig';
 import BacklinkSubmission, { IBacklinkSubmission } from '../../models/backlinkSubmission';
-import { isFixeraDomain } from './domains';
+import { isFixtractDomain } from './domains';
 import { canSubmitUrl, canUserSubmit } from './eligibility';
 import { BacklinkError } from './errors';
 import { normaliseSubmissionUrl } from './urls';
@@ -29,9 +29,9 @@ export async function createBacklinkSubmission(
     );
   }
 
-  if (isFixeraDomain(domain, config)) {
+  if (isFixtractDomain(domain, config)) {
     throw new BacklinkError(
-      'You cannot submit a Fixera URL — please link to Fixera from your own website',
+      'You cannot submit a Fixtract URL — please link to Fixtract from your own website',
       400,
     );
   }

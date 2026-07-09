@@ -292,7 +292,7 @@ async function importFromCSV() {
   try {
     const csvPath = path.join(
       __dirname,
-      "../public/Fixera service data ENG.csv",
+      "../public/Fixtract service data ENG.csv",
     );
 
     console.log("📖 Reading CSV file...");
@@ -305,7 +305,7 @@ async function importFromCSV() {
 
     // Connect to MongoDB
     const mongoURI =
-      process.env.MONGODB_URI || "mongodb://localhost:27017/fixera";
+      process.env.MONGODB_URI || "mongodb://localhost:27017/fixtract";
     await mongoose.connect(mongoURI);
     console.log("✅ Connected to MongoDB");
 

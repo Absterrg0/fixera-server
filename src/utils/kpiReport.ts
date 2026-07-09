@@ -312,7 +312,7 @@ export async function generateKpiPdf(from: Date, to: Date): Promise<Buffer> {
 
       const rangeLabel = `${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`;
 
-      doc.fontSize(20).font('Helvetica-Bold').text('FIXERA — Monthly KPI Report', { align: 'left' });
+      doc.fontSize(20).font('Helvetica-Bold').text('FIXTRACT — Monthly KPI Report', { align: 'left' });
       doc.fontSize(10).font('Helvetica').text(`Period: ${rangeLabel}`).moveDown(1);
 
       doc.fontSize(13).font('Helvetica-Bold').text('Summary');

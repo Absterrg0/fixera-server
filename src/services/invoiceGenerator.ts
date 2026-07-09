@@ -219,7 +219,7 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
       const issuer = data.issuer || {};
       doc
         .fontSize(20)
-        .text(issuer.name || "FIXERA", 50, 50)
+        .text(issuer.name || "FIXTRACT", 50, 50)
         .fontSize(10)
         .text(
           data.selfBilling
@@ -380,11 +380,11 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
 
       doc
         .fontSize(8)
-        .text("Thank you for using Fixera!", 50, footerY, {
+        .text("Thank you for using Fixtract!", 50, footerY, {
           align: "center",
           width: 500,
         })
-        .text("This invoice was generated automatically by the Fixera platform.", 50, footerY + 15, {
+        .text("This invoice was generated automatically by the Fixtract platform.", 50, footerY + 15, {
           align: "center",
           width: 500,
         });
@@ -533,7 +533,7 @@ export async function generateBookingInvoice(
     actualEndDate: booking.actualEndDate || booking.scheduledExecutionEndDate,
     selfBilling: true,
     issuer: {
-      name: settings.companyAddress?.name || "Fixera",
+      name: settings.companyAddress?.name || "Fixtract",
       vatNumber: settings.companyVatNumber,
       street: settings.companyAddress?.street,
       city: settings.companyAddress?.city,

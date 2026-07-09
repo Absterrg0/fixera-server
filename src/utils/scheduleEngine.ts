@@ -1,4 +1,4 @@
-//fixera-server/src/utils/scheduleEngine.ts
+//fixtract-server/src/utils/scheduleEngine.ts
 import mongoose from "mongoose";
 import Booking from "../models/booking";
 import Project from "../models/project";

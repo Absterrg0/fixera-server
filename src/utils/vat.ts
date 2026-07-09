@@ -1,5 +1,5 @@
 /**
- * VAT Calculation Utilities for Fixera Platform
+ * VAT Calculation Utilities for Fixtract Platform
  * Based on EU VAT rules and Belgian regulations
  * Version: 2.1
  */
@@ -51,7 +51,7 @@ export function getVATRate(countryCode: string): number {
 /**
  * Calculate VAT based on customer and professional locations
  *
- * VAT Rules (Fixera - Belgian company):
+ * VAT Rules (Fixtract - Belgian company):
  * 1. Belgium B2C (no VAT number): 21% VAT
  * 2. Belgium B2B (with VAT number): 21% VAT
  * 3. EU (ex-BE) B2C (no VAT number): 21% Belgian VAT

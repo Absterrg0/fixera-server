@@ -28,7 +28,7 @@ const seedProfessionals = async () => {
     const professionalsData = [
       {
         name: 'Marcus Janssen',
-        email: 'marcus.janssen@fixera.test',
+        email: 'marcus.janssen@fixtract.test',
         phone: '+32471234501',
         password: hashedPassword,
         role: 'professional',
@@ -49,7 +49,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Sophie Dubois',
-        email: 'sophie.dubois@fixera.test',
+        email: 'sophie.dubois@fixtract.test',
         phone: '+32471234502',
         password: hashedPassword,
         role: 'professional',
@@ -70,7 +70,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Lars Van Der Berg',
-        email: 'lars.vandeberg@fixera.test',
+        email: 'lars.vandeberg@fixtract.test',
         phone: '+31612345601',
         password: hashedPassword,
         role: 'professional',
@@ -91,7 +91,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Elena Martinez',
-        email: 'elena.martinez@fixera.test',
+        email: 'elena.martinez@fixtract.test',
         phone: '+32471234503',
         password: hashedPassword,
         role: 'professional',
@@ -112,7 +112,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Thomas Schneider',
-        email: 'thomas.schneider@fixera.test',
+        email: 'thomas.schneider@fixtract.test',
         phone: '+32471234504',
         password: hashedPassword,
         role: 'professional',
@@ -133,7 +133,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Isabella Rossi',
-        email: 'isabella.rossi@fixera.test',
+        email: 'isabella.rossi@fixtract.test',
         phone: '+32471234505',
         password: hashedPassword,
         role: 'professional',
@@ -154,7 +154,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Pieter Vermeer',
-        email: 'pieter.vermeer@fixera.test',
+        email: 'pieter.vermeer@fixtract.test',
         phone: '+31612345602',
         password: hashedPassword,
         role: 'professional',
@@ -175,7 +175,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Charlotte Weber',
-        email: 'charlotte.weber@fixera.test',
+        email: 'charlotte.weber@fixtract.test',
         phone: '+32471234506',
         password: hashedPassword,
         role: 'professional',
@@ -196,7 +196,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Miguel Santos',
-        email: 'miguel.santos@fixera.test',
+        email: 'miguel.santos@fixtract.test',
         phone: '+32471234507',
         password: hashedPassword,
         role: 'professional',
@@ -217,7 +217,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Nina Kowalski',
-        email: 'nina.kowalski@fixera.test',
+        email: 'nina.kowalski@fixtract.test',
         phone: '+31612345603',
         password: hashedPassword,
         role: 'professional',
@@ -238,7 +238,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Ahmed Hassan',
-        email: 'ahmed.hassan@fixera.test',
+        email: 'ahmed.hassan@fixtract.test',
         phone: '+32471234508',
         password: hashedPassword,
         role: 'professional',
@@ -259,7 +259,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Olivia Anderson',
-        email: 'olivia.anderson@fixera.test',
+        email: 'olivia.anderson@fixtract.test',
         phone: '+31612345604',
         password: hashedPassword,
         role: 'professional',
@@ -280,7 +280,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Viktor Petrov',
-        email: 'viktor.petrov@fixera.test',
+        email: 'viktor.petrov@fixtract.test',
         phone: '+32471234509',
         password: hashedPassword,
         role: 'professional',
@@ -301,7 +301,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Camille Laurent',
-        email: 'camille.laurent@fixera.test',
+        email: 'camille.laurent@fixtract.test',
         phone: '+32471234510',
         password: hashedPassword,
         role: 'professional',
@@ -322,7 +322,7 @@ const seedProfessionals = async () => {
       },
       {
         name: 'Jan de Vries',
-        email: 'jan.devries@fixera.test',
+        email: 'jan.devries@fixtract.test',
         phone: '+31612345605',
         password: hashedPassword,
         role: 'professional',
@@ -360,7 +360,7 @@ const seedProfessionals = async () => {
     console.log('🔑 All professionals use the same password: professional123');
     console.log('');
     console.log('📧 Sample login credentials:');
-    console.log('   Email: marcus.janssen@fixera.test');
+    console.log('   Email: marcus.janssen@fixtract.test');
     console.log('   Password: professional123');
     console.log('');
     console.log('✅ You can now view professionals on category pages like:');

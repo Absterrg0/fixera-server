@@ -23,7 +23,7 @@ export function getEffectiveAllowedDomains(config: IBacklinkConfig): string[] {
   return Array.from(new Set([...fromDb, ...fromEnv]));
 }
 
-/** True when the hostname is one of Fixera's own domains (not a valid external submission). */
-export function isFixeraDomain(domain: string, config: IBacklinkConfig): boolean {
+/** True when the hostname is one of Fixtract's own domains (not a valid external submission). */
+export function isFixtractDomain(domain: string, config: IBacklinkConfig): boolean {
   return getEffectiveAllowedDomains(config).includes(domain.toLowerCase());
 }
