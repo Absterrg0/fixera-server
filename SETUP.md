@@ -168,7 +168,7 @@ AWS S3 is used for secure file storage, particularly for user-uploaded documents
 2. **Create an IAM User for S3 Access**:
    - Go to the [IAM Console](https://console.aws.amazon.com/iam/).
    - Click **Users** → **Create User**.
-   - Enter a username (e.g., `fixtract-s3-user`).
+   - Enter a username (e.g., `fixera-s3-user`).
    - Select **Attach policies directly**.
    - Search for and select `AmazonS3FullAccess` policy (or create a custom policy for better security).
    - Click **Create user**.
@@ -187,7 +187,7 @@ AWS S3 is used for secure file storage, particularly for user-uploaded documents
 4. **Create an S3 Bucket**:
    - Go to the [S3 Console](https://s3.console.aws.amazon.com/).
    - Click **Create bucket**.
-   - Choose a unique bucket name (e.g., `my-fixtract-uploads`) → copy this for `S3_BUCKET_NAME`.
+   - Choose a unique bucket name (e.g., `my-fixera-uploads`) → copy this for `S3_BUCKET_NAME`.
    - Choose an AWS region (e.g., `us-east-1`, `eu-west-1`) → copy this for `AWS_REGION`.
    - **Bucket settings** (recommended for security):
      - Keep **Block Public Access** enabled.
