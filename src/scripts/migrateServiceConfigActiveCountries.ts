@@ -5,7 +5,7 @@ import ServiceConfiguration from '../models/serviceConfiguration'
 config()
 
 async function migrate() {
-  const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixtract'
+  const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixera'
   await mongoose.connect(mongoURI)
   console.log('Connected to MongoDB')
 

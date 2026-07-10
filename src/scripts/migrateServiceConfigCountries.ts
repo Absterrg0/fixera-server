@@ -6,7 +6,7 @@ config();
 
 async function migrate() {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixtract';
+    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixera';
     await mongoose.connect(mongoURI);
     console.log('Connected to MongoDB');
 
