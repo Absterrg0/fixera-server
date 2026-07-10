@@ -121,7 +121,7 @@ export const exportMyData = async (req: Request, res: Response) => {
     };
 
     const datePart = new Date().toISOString().split('T')[0];
-    const filename = `fixera-data-export-${userIdStr}-${datePart}.json`;
+    const filename = `fixtract-data-export-${userIdStr}-${datePart}.json`;
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

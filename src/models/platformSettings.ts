@@ -44,7 +44,7 @@ const platformSettingsSchema = new Schema<IPlatformSettings>({
     trim: true,
   },
   companyAddress: {
-    name: { type: String, trim: true, default: 'Fixera' },
+    name: { type: String, trim: true, default: 'Fixtract' },
     street: { type: String, trim: true },
     city: { type: String, trim: true },
     postalCode: { type: String, trim: true },

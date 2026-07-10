@@ -141,7 +141,7 @@ export async function verifyAndReward(
       submission.userId,
       rewardPoints,
       'backlink',
-      `Backlink reward: verified link to Fixera on ${submission.domain}`,
+      `Backlink reward: verified link to Fixtract on ${submission.domain}`,
       {
         metadata: {
           backlinkSubmissionId: submission._id.toString(),
@@ -218,7 +218,7 @@ export async function reconcileVerifiedWithoutTransaction(): Promise<void> {
           submission.userId,
           rewardPoints,
           'backlink',
-          `Backlink reward: verified link to Fixera on ${submission.domain}`,
+          `Backlink reward: verified link to Fixtract on ${submission.domain}`,
           {
             metadata: {
               backlinkSubmissionId: submission._id.toString(),

@@ -44,7 +44,7 @@ app.use(cookieParser());
 // Health check and root routes
 app.get('/', (req: Request, res: Response) => {
   res.json({
-    message: 'Fixera API Server is running',
+    message: 'Fixtract API Server is running',
     status: 'Up',
     version: '1.0.0',
   });

@@ -24,8 +24,8 @@ const seedAdmin = async () => {
 
     // Admin user data
     const adminData = {
-      name: 'Fixera Admin',
-      email: 'admin@fixera.com',
+      name: 'Fixtract Admin',
+      email: 'admin@fixtract.com',
       phone: '+1234567890',
       password: 'admin123456', // Will be hashed
       role: 'admin',
@@ -48,7 +48,7 @@ const seedAdmin = async () => {
     console.log('🎉 Admin user created successfully!');
     console.log('');
     console.log('📋 Admin Login Credentials:');
-    console.log('   Email: admin@fixera.com');
+    console.log('   Email: admin@fixtract.com');
     console.log('   Password: admin123456');
     console.log('');
     console.log('🔒 IMPORTANT: Change the password after first login!');

@@ -41,7 +41,7 @@ export const escapeHtml = (value: string | undefined | null): string => {
 // Common email header template
 const getEmailHeader = (title: string) => `
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 28px;">Fixera</h1>
+    <h1 style="color: white; margin: 0; font-size: 28px;">Fixtract</h1>
     <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">${escapeHtml(title)}</p>
   </div>
 `;
@@ -50,7 +50,7 @@ const getEmailHeader = (title: string) => `
 const getEmailFooter = () => `
   <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
     <p style="color: #999; font-size: 12px; margin: 0;">
-      © 2025 Fixera. All rights reserved.
+      © 2025 Fixtract. All rights reserved.
     </p>
   </div>
 `;
@@ -69,7 +69,7 @@ export const sendOTPEmail = async (email: string, otp: string, userName: string)
           <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${safeUserName}!</h2>
           
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Thank you for joining Fixera! To complete your registration, please use the verification code below:
+            Thank you for joining Fixtract! To complete your registration, please use the verification code below:
           </p>
           
           <div style="background: #fff; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
@@ -85,12 +85,12 @@ export const sendOTPEmail = async (email: string, otp: string, userName: string)
           
           <div style="background: #e8f4fd; border-left: 4px solid #667eea; padding: 15px; margin: 25px 0;">
             <p style="color: #333; margin: 0; font-size: 14px;">
-              <strong>Security Tip:</strong> Never share this code with anyone. Fixera will never ask for this code via phone or email.
+              <strong>Security Tip:</strong> Never share this code with anyone. Fixtract will never ask for this code via phone or email.
             </p>
           </div>
           
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            If you didn't create an account with Fixera, please ignore this email.
+            If you didn't create an account with Fixtract, please ignore this email.
           </p>
           
           ${getEmailFooter()}
@@ -100,10 +100,10 @@ export const sendOTPEmail = async (email: string, otp: string, userName: string)
     const emailAPI = createEmailAPI(); 
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Verify Your Fixera Account";
+    sendSmtpEmail.subject = "Verify Your Fixtract Account";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -121,19 +121,19 @@ export const sendWelcomeEmail = async (email: string, userName: string): Promise
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${getEmailHeader("Welcome to Fixera!")}
+        ${getEmailHeader("Welcome to Fixtract!")}
         
         <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
           <h2 style="color: #333; margin: 0 0 20px 0;">Welcome ${safeUserName}!</h2>
           
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Thank you for joining Fixera! Your account has been successfully created. We're excited to have you as part of our community of homeowners and skilled professionals.
+            Thank you for joining Fixtract! Your account has been successfully created. We're excited to have you as part of our community of homeowners and skilled professionals.
           </p>
           
           <div style="background: #e8f5e8; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; margin: 25px 0;">
             <h3 style="color: #2E7D32; margin: 0 0 15px 0; font-size: 18px;">✨ Next Steps</h3>
             <p style="color: #333; margin: 0 0 15px 0; line-height: 1.6;">
-              Complete your profile to get the most out of Fixera and start connecting with our verified professionals.
+              Complete your profile to get the most out of Fixtract and start connecting with our verified professionals.
             </p>
             <div style="text-align: center; margin-top: 20px;">
               <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/profile" 
@@ -144,7 +144,7 @@ export const sendWelcomeEmail = async (email: string, userName: string): Promise
           </div>
           
           <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 25px 0;">
-            <h3 style="color: #333; margin: 0 0 15px 0; font-size: 16px;">🏠 What you can do with Fixera:</h3>
+            <h3 style="color: #333; margin: 0 0 15px 0; font-size: 16px;">🏠 What you can do with Fixtract:</h3>
             <ul style="color: #666; line-height: 1.8; margin: 0; padding-left: 20px;">
               <li>Find verified professionals for home services</li>
               <li>Get instant quotes or custom project estimates</li>
@@ -165,10 +165,10 @@ export const sendWelcomeEmail = async (email: string, userName: string): Promise
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Welcome to Fixera - Let's Complete Your Profile!";
+    sendSmtpEmail.subject = "Welcome to Fixtract - Let's Complete Your Profile!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -186,7 +186,7 @@ export const sendProfessionalWelcomeEmail = async (email: string, professionalNa
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${getEmailHeader("Welcome to Fixera Professionals")}
+        ${getEmailHeader("Welcome to Fixtract Professionals")}
 
         <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
           <h2 style="color: #333; margin: 0 0 20px 0;">Welcome ${safeProfessionalName}!</h2>
@@ -198,7 +198,7 @@ export const sendProfessionalWelcomeEmail = async (email: string, professionalNa
           <div style="background: #e8f5e8; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; margin: 25px 0;">
             <h3 style="color: #2E7D32; margin: 0 0 15px 0; font-size: 18px;">Next Steps</h3>
             <p style="color: #333; margin: 0 0 15px 0; line-height: 1.6;">
-              Review your business profile, keep your availability updated, and watch for approval from the Fixera team.
+              Review your business profile, keep your availability updated, and watch for approval from the Fixtract team.
             </p>
             <div style="text-align: center; margin-top: 20px;">
               <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard"
@@ -213,7 +213,7 @@ export const sendProfessionalWelcomeEmail = async (email: string, professionalNa
           </div>
 
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            Once approved, you will be able to create projects and start working with customers on Fixera.
+            Once approved, you will be able to create projects and start working with customers on Fixtract.
           </p>
 
           ${getEmailFooter()}
@@ -224,10 +224,10 @@ export const sendProfessionalWelcomeEmail = async (email: string, professionalNa
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Welcome to Fixera Professionals";
+    sendSmtpEmail.subject = "Welcome to Fixtract Professionals";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -281,10 +281,10 @@ export const sendIdExpiredEmail = async (email: string, userName: string): Promi
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera: Your ID Has Expired";
+    sendSmtpEmail.subject = "Fixtract: Your ID Has Expired";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -308,7 +308,7 @@ export const sendProfessionalApprovalEmail = async (email: string, professionalN
           <h2 style="color: #333; margin: 0 0 20px 0;">Congratulations ${safeProfessionalName}!</h2>
           
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Great news! Your professional profile has been approved by our team. You can now start accepting projects and connecting with customers on Fixera.
+            Great news! Your professional profile has been approved by our team. You can now start accepting projects and connecting with customers on Fixtract.
           </p>
           
           <div style="background: #e8f5e8; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
@@ -339,7 +339,7 @@ export const sendProfessionalApprovalEmail = async (email: string, professionalN
           </div>
           
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            Welcome to the Fixera professional community! We're here to support your success.
+            Welcome to the Fixtract professional community! We're here to support your success.
           </p>
           
           ${getEmailFooter()}
@@ -350,10 +350,10 @@ export const sendProfessionalApprovalEmail = async (email: string, professionalN
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "🎉 Your Fixera Professional Profile is Approved!";
+    sendSmtpEmail.subject = "🎉 Your Fixtract Professional Profile is Approved!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -380,7 +380,7 @@ export const sendProfessionalRejectionEmail = async (email: string, professional
           <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${safeProfessionalName},</h2>
           
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Thank you for your interest in becoming a verified professional on Fixera. After reviewing your profile, we need you to address some items before we can approve your account.
+            Thank you for your interest in becoming a verified professional on Fixtract. After reviewing your profile, we need you to address some items before we can approve your account.
           </p>
           
           <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin: 25px 0;">
@@ -427,10 +427,10 @@ export const sendProfessionalRejectionEmail = async (email: string, professional
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Profile Update Required - Please Review";
+    sendSmtpEmail.subject = "Fixtract Profile Update Required - Please Review";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -483,7 +483,7 @@ export const sendProfessionalIdChangeRejectionEmail = async (
     sendSmtpEmail.subject = "ID document rejected — account remains approved";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -534,7 +534,7 @@ export const sendProfessionalIdChangeApprovalEmail = async (
     sendSmtpEmail.subject = "ID document update approved — account remains approved";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -571,7 +571,7 @@ export const sendProfessionalSuspensionEmail = async (email: string, name: strin
           </p>
           
           <p style="color: #333; line-height: 1.6; margin-bottom: 20px;">
-            We're writing to inform you that your Fixera professional account has been temporarily suspended.
+            We're writing to inform you that your Fixtract professional account has been temporarily suspended.
           </p>
           
           <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 25px 0;">
@@ -597,7 +597,7 @@ export const sendProfessionalSuspensionEmail = async (email: string, name: strin
               If you believe this suspension was made in error or if you'd like to discuss this decision, please contact our support team immediately. We're here to help resolve any issues.
             </p>
             <div style="text-align: center; margin-top: 20px;">
-              <a href="mailto:support@fixera.com" 
+              <a href="mailto:support@fixtract.com" 
                  style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
                 Contact Support
               </a>
@@ -616,10 +616,10 @@ export const sendProfessionalSuspensionEmail = async (email: string, name: strin
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Account Suspended - Action Required";
+    sendSmtpEmail.subject = "Fixtract Account Suspended - Action Required";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -655,7 +655,7 @@ export const sendProfessionalReactivationEmail = async (email: string, name: str
           </p>
           
           <p style="color: #333; line-height: 1.6; margin-bottom: 20px;">
-            Great news! Your Fixera professional account has been reactivated and is now fully operational.
+            Great news! Your Fixtract professional account has been reactivated and is now fully operational.
           </p>
           
           <div style="background: #dcfce7; border: 2px solid #16a34a; border-radius: 8px; padding: 20px; margin: 25px 0;">
@@ -676,7 +676,7 @@ export const sendProfessionalReactivationEmail = async (email: string, name: str
           </div>
           
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            Thank you for your patience during this process. We're excited to have you back on the platform and look forward to your continued success with Fixera.
+            Thank you for your patience during this process. We're excited to have you back on the platform and look forward to your continued success with Fixtract.
           </p>
           
           ${getEmailFooter()}
@@ -687,10 +687,10 @@ export const sendProfessionalReactivationEmail = async (email: string, name: str
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Account Reactivated - Welcome Back!";
+    sendSmtpEmail.subject = "Fixtract Account Reactivated - Welcome Back!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = { 
-      name: "Fixera Team", 
+      name: "Fixtract Team", 
       email: process.env.FROM_EMAIL || "anafariya@gmail.com" 
     };
 
@@ -726,7 +726,7 @@ export const sendTeamMemberInvitationEmail = async (
             <h2 style="color: #333; margin-bottom: 20px;">Welcome to the Team, ${safeTeamMemberName}!</h2>
 
             <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
-              You have been invited to join <strong>${safeCompanyName}</strong> as a team member on the Fixera platform.
+              You have been invited to join <strong>${safeCompanyName}</strong> as a team member on the Fixtract platform.
             </p>
 
             <div style="background: #f8f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
@@ -773,8 +773,8 @@ export const sendTeamMemberInvitationEmail = async (
       subject: `Welcome to ${companyName} - Team Member Invitation`,
       htmlContent: htmlContent,
       sender: {
-        email: process.env.FROM_EMAIL || 'noreply@fixera.com',
-        name: 'Fixera Team'
+        email: process.env.FROM_EMAIL || 'noreply@fixtract.com',
+        name: 'Fixtract Team'
       },
     };
 
@@ -806,7 +806,7 @@ export const sendProjectApprovalEmail = async (
           <h2 style="color: #333; margin: 0 0 20px 0;">Congratulations ${safeProfessionalName}!</h2>
 
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Great news! Your project "<strong>${safeProjectTitle}</strong>" has been approved and is now live on Fixera.
+            Great news! Your project "<strong>${safeProjectTitle}</strong>" has been approved and is now live on Fixtract.
           </p>
 
           <div style="background: #e8f5e8; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
@@ -837,7 +837,7 @@ export const sendProjectApprovalEmail = async (
           </div>
 
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            Thank you for being part of the Fixera community. We're excited to see your project succeed!
+            Thank you for being part of the Fixtract community. We're excited to see your project succeed!
           </p>
 
           ${getEmailFooter()}
@@ -848,10 +848,10 @@ export const sendProjectApprovalEmail = async (
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "🎉 Your Fixera Project is Approved!";
+    sendSmtpEmail.subject = "🎉 Your Fixtract Project is Approved!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -923,10 +923,10 @@ export const sendProjectRejectionEmail = async (
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Project Update Required - Please Review";
+    sendSmtpEmail.subject = "Fixtract Project Update Required - Please Review";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -959,7 +959,7 @@ export const sendProjectDeletedEmail = async (
           <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${safeProfessionalName},</h2>
 
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            We're writing to inform you that your project "<strong>${safeProjectTitle}</strong>" has been removed from Fixera.
+            We're writing to inform you that your project "<strong>${safeProjectTitle}</strong>" has been removed from Fixtract.
           </p>
 
           <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 25px 0;">
@@ -985,14 +985,14 @@ export const sendProjectDeletedEmail = async (
                style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 10px;">
               Create New Project
             </a>
-            <a href="mailto:support@fixera.com"
+            <a href="mailto:support@fixtract.com"
                style="background: #6b7280; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               Contact Support
             </a>
           </div>
 
           <p style="color: #666; line-height: 1.6; margin-top: 30px;">
-            We appreciate your understanding and look forward to seeing your future projects on Fixera.
+            We appreciate your understanding and look forward to seeing your future projects on Fixtract.
           </p>
 
           ${getEmailFooter()}
@@ -1003,10 +1003,10 @@ export const sendProjectDeletedEmail = async (
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Project Deleted - Important Notice";
+    sendSmtpEmail.subject = "Fixtract Project Deleted - Important Notice";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -1068,7 +1068,7 @@ export const sendProjectDeactivatedEmail = async (
                style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 10px;">
               View Project
             </a>
-            <a href="mailto:support@fixera.com"
+            <a href="mailto:support@fixtract.com"
                style="background: #6b7280; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               Contact Support
             </a>
@@ -1086,10 +1086,10 @@ export const sendProjectDeactivatedEmail = async (
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "Fixera Project Temporarily Deactivated";
+    sendSmtpEmail.subject = "Fixtract Project Temporarily Deactivated";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -1122,7 +1122,7 @@ export const sendProjectReactivatedEmail = async (
           <h2 style="color: #333; margin: 0 0 20px 0;">Great News, ${safeProfessionalName}!</h2>
 
           <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            Your project "<strong>${safeProjectTitle}</strong>" has been reactivated and is now live on Fixera again!
+            Your project "<strong>${safeProjectTitle}</strong>" has been reactivated and is now live on Fixtract again!
           </p>
 
           <div style="background: #dcfce7; border: 2px solid #16a34a; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
@@ -1164,10 +1164,10 @@ export const sendProjectReactivatedEmail = async (
     const emailAPI = createEmailAPI();
     const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = "🎉 Your Fixera Project is Reactivated!";
+    sendSmtpEmail.subject = "🎉 Your Fixtract Project is Reactivated!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -1255,7 +1255,7 @@ export const sendBookingNotificationEmail = async (
     sendSmtpEmail.subject = "🎉 New Booking Request for Your Project!";
     sendSmtpEmail.htmlContent = emailContent;
     sendSmtpEmail.sender = {
-      name: "Fixera Team",
+      name: "Fixtract Team",
       email: process.env.FROM_EMAIL || "anafariya@gmail.com"
     };
 
@@ -1337,8 +1337,8 @@ const sendEmail = async (
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = htmlContent;
     sendSmtpEmail.sender = {
-      name: 'Fixera Team',
-      email: process.env.FROM_EMAIL || 'noreply@fixera.com',
+      name: 'Fixtract Team',
+      email: process.env.FROM_EMAIL || 'noreply@fixtract.com',
     };
     await emailAPI.sendTransacEmail(sendSmtpEmail);
     logDevEmail('SENT', to, subject, template, htmlContent);
@@ -1387,7 +1387,7 @@ export const sendRfqReceivedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, 'New Request for Quote - Fixera', content, {
+  return sendEmail(profEmail, 'New Request for Quote - Fixtract', content, {
     template: 'rfq_received',
     relatedBooking: bookingId,
   });
@@ -1413,7 +1413,7 @@ export const sendRfqAcceptedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Your Request Has Been Accepted - Fixera', content, {
+  return sendEmail(custEmail, 'Your Request Has Been Accepted - Fixtract', content, {
     template: 'rfq_accepted',
     relatedBooking: bookingId,
   });
@@ -1435,14 +1435,14 @@ export const sendRfqRejectedEmail = async (
           <p style="color: #333; margin: 0;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
         </div>
         <p style="color: #666; line-height: 1.6;">
-          Don't worry — you can search for other professionals on Fixera who can help with your project.
+          Don't worry — you can search for other professionals on Fixtract who can help with your project.
         </p>
         ${buildEmailButton(`${FRONTEND_URL}/search`, 'Find Other Professionals')}
         ${getEmailFooter()}
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Request Update - Fixera', content, {
+  return sendEmail(custEmail, 'Request Update - Fixtract', content, {
     template: 'rfq_rejected',
   });
 };
@@ -1471,7 +1471,7 @@ export const sendQuotationReceivedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, `Quotation ${quotationNumber} Received - Fixera`, content, {
+  return sendEmail(custEmail, `Quotation ${quotationNumber} Received - Fixtract`, content, {
     template: 'quotation_received',
     relatedBooking: bookingId,
   });
@@ -1497,7 +1497,7 @@ export const sendQuotationUpdatedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, `Quotation ${quotationNumber} Updated - Fixera`, content, {
+  return sendEmail(custEmail, `Quotation ${quotationNumber} Updated - Fixtract`, content, {
     template: 'quotation_updated',
     relatedBooking: bookingId,
   });
@@ -1520,7 +1520,7 @@ export const sendQuotationAcceptedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, `Quotation ${quotationNumber} Accepted - Fixera`, content, {
+  return sendEmail(profEmail, `Quotation ${quotationNumber} Accepted - Fixtract`, content, {
     template: 'quotation_accepted',
     relatedBooking: bookingId,
   });
@@ -1548,7 +1548,7 @@ export const sendQuotationRejectedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, `Quotation Feedback - ${quotationNumber} - Fixera`, content, {
+  return sendEmail(profEmail, `Quotation Feedback - ${quotationNumber} - Fixtract`, content, {
     template: 'quotation_rejected',
   });
 };
@@ -1575,7 +1575,7 @@ export const sendRfqDeadlineReminderEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, 'Quotation Deadline Reminder - Fixera', content, {
+  return sendEmail(profEmail, 'Quotation Deadline Reminder - Fixtract', content, {
     template: 'rfq_deadline_reminder',
     relatedBooking: bookingId,
   });
@@ -1608,7 +1608,7 @@ export const sendRfqDeadlineExpiredEmail = async (
           Unfortunately, the professional did not submit a quotation within the required timeframe. Your request has been cancelled.
         </p>
         <p style="color: #666; line-height: 1.6;">
-          You can search for other professionals on Fixera who can help with your project.
+          You can search for other professionals on Fixtract who can help with your project.
         </p>
         ${buildEmailButton(`${FRONTEND_URL}/search`, 'Find Other Professionals')}
         ${getEmailFooter()}
@@ -1617,8 +1617,8 @@ export const sendRfqDeadlineExpiredEmail = async (
   `;
   const meta = { template: 'rfq_deadline_expired', relatedBooking: bookingId };
   const [profResult, custResult] = await Promise.all([
-    sendEmail(profEmail, 'Quotation Deadline Expired - Fixera', profContent, meta),
-    sendEmail(custEmail, 'Request Update - Fixera', custContent, meta),
+    sendEmail(profEmail, 'Quotation Deadline Expired - Fixtract', profContent, meta),
+    sendEmail(custEmail, 'Request Update - Fixtract', custContent, meta),
   ]);
   if (!profResult) {
     console.error(`[Email] Failed to send RFQ deadline expired email to professional: ${profEmail}`);
@@ -1653,7 +1653,7 @@ export const sendDirectQuotationEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, `Quotation from ${profName} - Fixera`, content, {
+  return sendEmail(custEmail, `Quotation from ${profName} - Fixtract`, content, {
     template: 'direct_quotation',
     relatedBooking: bookingId,
   });
@@ -1727,8 +1727,8 @@ export const sendPaymentConfirmedEmail = async (
   `;
   const meta = { template: 'payment_confirmed', relatedBooking: bookingId };
   const [custOk, profOk] = await Promise.all([
-    sendEmail(custEmail, 'Payment Confirmed - Fixera', custContent, meta),
-    sendEmail(profEmail, 'Booking Payment Received - Fixera', profContent, meta),
+    sendEmail(custEmail, 'Payment Confirmed - Fixtract', custContent, meta),
+    sendEmail(profEmail, 'Booking Payment Received - Fixtract', profContent, meta),
   ]);
   return custOk && profOk;
 };
@@ -1757,7 +1757,7 @@ export const sendBookingScheduledEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Your Booking Is Scheduled - Fixera', content, {
+  return sendEmail(custEmail, 'Your Booking Is Scheduled - Fixtract', content, {
     template: 'booking_scheduled',
     relatedBooking: bookingId,
   });
@@ -1794,7 +1794,7 @@ export const sendRescheduleRequestedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Rescheduling Request - Fixera', content, {
+  return sendEmail(custEmail, 'Rescheduling Request - Fixtract', content, {
     template: 'reschedule_requested',
     relatedBooking: bookingId,
   });
@@ -1826,7 +1826,7 @@ export const sendRescheduleResolvedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, `${title} - Fixera`, content, {
+  return sendEmail(profEmail, `${title} - Fixtract`, content, {
     template: accepted ? 'reschedule_accepted' : 'reschedule_declined',
     relatedBooking: bookingId,
   });
@@ -1869,8 +1869,8 @@ export const sendBookingCancelledEmail = async (
   );
   const meta = { template: 'booking_cancelled', relatedBooking: bookingId };
   const [custOk, profOk] = await Promise.all([
-    sendEmail(custEmail, 'Booking Cancelled - Fixera', custContent, meta),
-    sendEmail(profEmail, 'Booking Cancelled - Fixera', profContent, meta),
+    sendEmail(custEmail, 'Booking Cancelled - Fixtract', custContent, meta),
+    sendEmail(profEmail, 'Booking Cancelled - Fixtract', profContent, meta),
   ]);
   return custOk && profOk;
 };
@@ -1905,7 +1905,7 @@ export const sendRefundProcessedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, `${title} - Fixera`, content, {
+  return sendEmail(custEmail, `${title} - Fixtract`, content, {
     template: isPartial ? 'refund_partial' : 'refund_processed',
     relatedBooking: bookingId,
   });
@@ -1942,7 +1942,7 @@ export const sendProfessionalCompletedEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Work Completed — Please Confirm - Fixera', content, {
+  return sendEmail(custEmail, 'Work Completed — Please Confirm - Fixtract', content, {
     template: 'professional_completed',
     relatedBooking: bookingId,
   });
@@ -1971,7 +1971,7 @@ export const sendCustomerConfirmedCompletionEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(profEmail, 'Booking Confirmed Complete - Fixera', content, {
+  return sendEmail(profEmail, 'Booking Confirmed Complete - Fixtract', content, {
     template: 'customer_confirmed_completion',
     relatedBooking: bookingId,
   });
@@ -2025,8 +2025,8 @@ export const sendDisputeRaisedEmail = async (
   `;
   const meta = { template: 'dispute_raised', relatedBooking: bookingId };
   const [profOk, adminOk] = await Promise.all([
-    sendEmail(profEmail, 'Dispute Raised - Fixera', profContent, meta),
-    sendEmail(adminEmail, 'New Dispute — Action Required - Fixera', adminContent, meta),
+    sendEmail(profEmail, 'Dispute Raised - Fixtract', profContent, meta),
+    sendEmail(adminEmail, 'New Dispute — Action Required - Fixtract', adminContent, meta),
   ]);
   return profOk && adminOk;
 };
@@ -2063,8 +2063,8 @@ export const sendDisputeResolvedEmail = async (
   `;
   const meta = { template: 'dispute_resolved', relatedBooking: bookingId };
   const [custOk, profOk] = await Promise.all([
-    sendEmail(custEmail, 'Dispute Resolved - Fixera', buildContent(custName), meta),
-    sendEmail(profEmail, 'Dispute Resolved - Fixera', buildContent(profName), meta),
+    sendEmail(custEmail, 'Dispute Resolved - Fixtract', buildContent(custName), meta),
+    sendEmail(profEmail, 'Dispute Resolved - Fixtract', buildContent(profName), meta),
   ]);
   return custOk && profOk;
 };
@@ -2113,8 +2113,8 @@ export const sendWarrantyClaimOpenedEmail = async (
   `;
   const meta = { template: 'warranty_opened', relatedBooking: bookingId };
   const [profOk, adminOk] = await Promise.all([
-    sendEmail(profEmail, 'Warranty Claim Opened - Fixera', profContent, meta),
-    sendEmail(adminEmail, 'New Warranty Claim - Fixera', adminContent, meta),
+    sendEmail(profEmail, 'Warranty Claim Opened - Fixtract', profContent, meta),
+    sendEmail(adminEmail, 'New Warranty Claim - Fixtract', adminContent, meta),
   ]);
   return profOk && adminOk;
 };
@@ -2144,7 +2144,7 @@ export const sendWarrantyProposalSentEmail = async (
       </div>
     </div>
   `;
-  return sendEmail(custEmail, 'Warranty Proposal Received - Fixera', content, {
+  return sendEmail(custEmail, 'Warranty Proposal Received - Fixtract', content, {
     template: 'warranty_proposal_sent',
     relatedBooking: bookingId,
   });
@@ -2197,7 +2197,7 @@ export const sendCancellationRequestRaisedEmail = async (params: {
   );
   const adminSent = await sendEmail(
     adminEmail,
-    'Cancellation Request - Fixera Admin Review',
+    'Cancellation Request - Fixtract Admin Review',
     adminContent,
     meta
   );
@@ -2210,7 +2210,7 @@ export const sendCancellationRequestRaisedEmail = async (params: {
     );
     otherSent = await sendEmail(
       otherPartyEmail,
-      'Cancellation Request Submitted - Fixera',
+      'Cancellation Request Submitted - Fixtract',
       otherContent,
       meta
     );
@@ -2241,13 +2241,13 @@ export const sendRefundCounterOfferEmail = async (params: {
           <strong>${formatCurrency(amount, currency || 'EUR')}</strong> for your booking.
         </p>
         ${note ? `<div style="background: #eef2ff; border-left: 4px solid #6366f1; padding: 15px; margin: 20px 0;"><p style="color: #333; margin: 0;">${escapeHtml(note)}</p></div>` : ''}
-        <p style="color: #666; line-height: 1.6;">Open your booking to accept the offer or refuse and escalate to Fixera.</p>
+        <p style="color: #666; line-height: 1.6;">Open your booking to accept the offer or refuse and escalate to Fixtract.</p>
         ${buildEmailButton(link, 'Review Offer', '#6366f1')}
         ${getEmailFooter()}
       </div>
     </div>
   `;
-  return sendEmail(customerEmail, 'Refund Counter-Offer - Fixera', content, {
+  return sendEmail(customerEmail, 'Refund Counter-Offer - Fixtract', content, {
     template: 'refund_counter_offer',
     relatedBooking: bookingId,
   });
@@ -2272,7 +2272,7 @@ export const sendRefundEscalatedEmail = async (params: {
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       ${getEmailHeader('Refund Escalated')}
       <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin: 0 0 20px 0;">A refund needs Fixera review</h2>
+        <h2 style="color: #333; margin: 0 0 20px 0;">A refund needs Fixtract review</h2>
         <p style="color: #666; line-height: 1.6;">A refund request has been escalated because ${reasonText}.</p>
         ${buildEmailButton(link, 'View Booking', '#dc2626')}
         ${getEmailFooter()}
@@ -2281,7 +2281,7 @@ export const sendRefundEscalatedEmail = async (params: {
   `;
   let adminSent = true;
   if (adminEmail) {
-    adminSent = await sendEmail(adminEmail, 'Refund Escalated - Fixera Admin Review', adminContent, {
+    adminSent = await sendEmail(adminEmail, 'Refund Escalated - Fixtract Admin Review', adminContent, {
       template: 'refund_escalated',
       relatedBooking: bookingId,
     });
@@ -2293,16 +2293,16 @@ export const sendRefundEscalatedEmail = async (params: {
   if (customerEmail) {
     const customerContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${getEmailHeader('Refund Escalated to Fixera')}
+        ${getEmailHeader('Refund Escalated to Fixtract')}
         <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
           <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${escapeHtml(customerName || 'Customer')},</h2>
-          <p style="color: #666; line-height: 1.6;">Your refund request has been escalated to Fixera for review. We'll be in touch shortly.</p>
+          <p style="color: #666; line-height: 1.6;">Your refund request has been escalated to Fixtract for review. We'll be in touch shortly.</p>
           ${buildEmailButton(link, 'View Booking', '#dc2626')}
           ${getEmailFooter()}
         </div>
       </div>
     `;
-    await sendEmail(customerEmail, 'Refund Escalated to Fixera', customerContent, {
+    await sendEmail(customerEmail, 'Refund Escalated to Fixtract', customerContent, {
       template: 'refund_escalated_customer',
       relatedBooking: bookingId,
     });
@@ -2336,7 +2336,7 @@ export const sendRefundDeniedEmail = async (params: {
       </div>
     </div>
   `;
-  return sendEmail(requesterEmail, 'Refund Request Denied - Fixera', content, {
+  return sendEmail(requesterEmail, 'Refund Request Denied - Fixtract', content, {
     template: 'refund_denied',
     relatedBooking: bookingId,
   });
@@ -2364,7 +2364,7 @@ export const sendDisputeSlaBreachedEmail = async (params: {
       </div>
     </div>
   `;
-  return sendEmail(adminEmail, 'Dispute SLA Breached - Fixera Admin', content, {
+  return sendEmail(adminEmail, 'Dispute SLA Breached - Fixtract Admin', content, {
     template: 'dispute_sla_breached',
     relatedBooking: bookingId,
   });
@@ -2378,8 +2378,8 @@ export const sendKpiReportEmail = async (
   const rangeLabel = `${from.toISOString().slice(0, 10)} – ${to.toISOString().slice(0, 10)}`;
   const isError = !reportUrl;
   const subject = isError
-    ? `KPI Report Failed (${rangeLabel}) - Fixera Admin`
-    : `KPI Report Ready (${rangeLabel}) - Fixera Admin`;
+    ? `KPI Report Failed (${rangeLabel}) - Fixtract Admin`
+    : `KPI Report Ready (${rangeLabel}) - Fixtract Admin`;
   const body = isError
     ? `<p style="color: #666; line-height: 1.6;">We were unable to generate your KPI report for <strong>${escapeHtml(rangeLabel)}</strong>.</p>
        <p style="color: #666; line-height: 1.6;">Error: ${escapeHtml(error || 'Unknown error')}</p>
@@ -2391,7 +2391,7 @@ export const sendKpiReportEmail = async (
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       ${getEmailHeader(isError ? 'KPI Report Failed' : 'KPI Report Ready')}
       <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <h2 style="color: #333; margin: 0 0 20px 0;">Fixera KPI Report</h2>
+        <h2 style="color: #333; margin: 0 0 20px 0;">Fixtract KPI Report</h2>
         ${body}
         ${getEmailFooter()}
       </div>

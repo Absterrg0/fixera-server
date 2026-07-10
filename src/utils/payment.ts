@@ -1,5 +1,5 @@
 /**
- * Payment Utility Functions for Fixera Platform
+ * Payment Utility Functions for Fixtract Platform
  * Version: 2.1
  */
 

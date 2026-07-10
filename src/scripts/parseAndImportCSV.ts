@@ -292,7 +292,7 @@ async function importFromCSV() {
   try {
     const csvPath = path.join(
       __dirname,
-      "../public/Fixera service data ENG.csv",
+      "../public/Fixtract service data ENG.csv",
     );
 
     console.log("📖 Reading CSV file...");

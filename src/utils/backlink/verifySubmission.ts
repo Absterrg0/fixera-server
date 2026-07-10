@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import BacklinkConfig from '../../models/backlinkConfig';
 import BacklinkSubmission from '../../models/backlinkSubmission';
 import { scrapePageForLinks, FirecrawlError } from '../firecrawlClient';
-import { extractFixeraLinks } from './verification';
+import { extractFixtractLinks } from './verification';
 import { getEffectiveAllowedDomains } from './domains';
 import { rejectSubmission, verifyAndReward, reconcileVerifiedWithoutTransaction } from './rewards';
 
@@ -23,7 +23,7 @@ async function rejectStuckVerifying(
 }
 
 /**
- * Crawl the submitted URL via Firecrawl, check for a Fixera link, and
+ * Crawl the submitted URL via Firecrawl, check for a Fixtract link, and
  * transition the submission to verified (+ award points) or rejected.
  */
 export async function verifyBacklinkSubmission(
@@ -68,7 +68,7 @@ export async function verifyBacklinkSubmission(
       return;
     }
 
-    const foundLinks = extractFixeraLinks(
+    const foundLinks = extractFixtractLinks(
       scrapeResult,
       allowedDomains,
       config.requireFollowLink,

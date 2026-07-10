@@ -106,7 +106,7 @@ export const odooJson2Call = async <T>(
     headers: {
       "Content-Type": "application/json",
       Authorization: `bearer ${credentials.apiKey}`,
-      "User-Agent": "fixera-server odoo-accounting",
+      "User-Agent": "fixtract-server odoo-accounting",
     },
     body: JSON.stringify(withCompanyContext(companyId, body)),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

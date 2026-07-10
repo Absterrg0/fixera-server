@@ -1,4 +1,4 @@
-# Fixera Server
+# Fixtract Server
 
 Express + TypeScript API for authentication, user verification (email + phone OTP), and basic user endpoints.
 

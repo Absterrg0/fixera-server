@@ -17,9 +17,9 @@ export const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2026-02-25.clover",
   typescript: true,
   appInfo: {
-    name: "Fixera Platform",
+    name: "Fixtract Platform",
     version: "2.1.0",
-    url: "https://fixera.com",
+    url: "https://fixtract.com",
   },
 });
 

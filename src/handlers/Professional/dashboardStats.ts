@@ -430,7 +430,7 @@ export const getProfessionalDashboardBookings = async (req: Request, res: Respon
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="fixera-bookings-${range}-${new Date().toISOString().slice(0, 10)}.csv"`
+        `attachment; filename="fixtract-bookings-${range}-${new Date().toISOString().slice(0, 10)}.csv"`
       );
       return res.send(csv);
     }

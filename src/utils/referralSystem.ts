@@ -6,7 +6,7 @@ import { addPoints } from './pointsSystem';
 
 /**
  * Generate a unique referral code for a user.
- * Format: FIXERA-{NAME}-{4-CHAR-ID}
+ * Format: FIXTRACT-{NAME}-{4-CHAR-ID}
  */
 export const generateReferralCode = async (userName: string): Promise<string> => {
   const namePart = userName
@@ -26,7 +26,7 @@ export const generateReferralCode = async (userName: string): Promise<string> =>
     for (let i = 0; i < 4; i++) {
       randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    code = `FIXERA-${namePart}-${randomPart}`;
+    code = `FIXTRACT-${namePart}-${randomPart}`;
     attempts++;
 
     const existing = await User.findOne({ referralCode: code });
