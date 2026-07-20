@@ -34,18 +34,22 @@ export const listNotifications = async (req: Request, res: Response): Promise<vo
       if (sep !== -1) {
         const beforeDate = new Date(before.slice(0, sep));
         const beforeId = before.slice(sep + 1);
-        if (!Number.isNaN(beforeDate.getTime()) && mongoose.Types.ObjectId.isValid(beforeId)) {
-          filter.$or = [
-            { createdAt: { $lt: beforeDate } },
-            { createdAt: beforeDate, _id: { $lt: new mongoose.Types.ObjectId(beforeId) } },
-          ];
+        if (Number.isNaN(beforeDate.getTime()) || !mongoose.Types.ObjectId.isValid(beforeId)) {
+          res.status(400).json({ success: false, msg: 'Invalid pagination cursor' });
+          return;
         }
+        filter.$or = [
+          { createdAt: { $lt: beforeDate } },
+          { createdAt: beforeDate, _id: { $lt: new mongoose.Types.ObjectId(beforeId) } },
+        ];
       } else {
         // Legacy ISO-only cursors
         const beforeDate = new Date(before);
-        if (!Number.isNaN(beforeDate.getTime())) {
-          filter.createdAt = { $lt: beforeDate };
+        if (Number.isNaN(beforeDate.getTime())) {
+          res.status(400).json({ success: false, msg: 'Invalid pagination cursor' });
+          return;
         }
+        filter.createdAt = { $lt: beforeDate };
       }
     }
 

@@ -512,7 +512,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     console.error('Failed to send refund-processed email:', emailError?.message || emailError);
   }
 
-  if (booking.payment.status === 'refunded') {
+  if (booking.payment.status === 'refunded' || booking.payment.status === 'partially_refunded') {
     try {
       const { notifyAsync } = await import('../../utils/notifications/notify');
       if (booking.customer) {
@@ -522,6 +522,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
           entityType: 'booking',
           entityId: String(booking._id),
           context: { bookingId: String(booking._id) },
+          meta: { partial: booking.payment.status === 'partially_refunded' },
         });
       }
       if (booking.professional) {
@@ -531,6 +532,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
           entityType: 'booking',
           entityId: String(booking._id),
           context: { bookingId: String(booking._id) },
+          meta: { partial: booking.payment.status === 'partially_refunded' },
         });
       }
     } catch (notifyError: any) {

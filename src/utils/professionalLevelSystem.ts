@@ -284,7 +284,7 @@ export const updateProfessionalLevel = async (
   if (oldLevel !== levelInfo.currentLevel) {
     user.professionalLevel = levelInfo.currentLevel;
     await user.save(opts?.session ? { session: opts.session } : {});
-    console.log(`Professional Level: ${user.email} ${oldLevel} -> ${levelInfo.currentLevel}`);
+    console.log(`Professional Level: ${professionalId} ${oldLevel} -> ${levelInfo.currentLevel}`);
     // Defer notify when inside a transaction — caller must flush after commit.
     if (leveledUp && !opts?.session) {
       try {
