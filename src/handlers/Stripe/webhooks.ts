@@ -370,10 +370,11 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       }
 
       // Inbox + email + push for professional "new booking"
+      // Await notify on serverless — fire-and-forget can be frozen before inbox/email complete.
       try {
         if (professionalUser?._id) {
-          const { notifyAsync } = await import('../../utils/notifications/notify');
-          notifyAsync({
+          const { notify } = await import('../../utils/notifications/notify');
+          await notify({
             userId: professionalUser._id.toString(),
             eventKey: 'professional.booking_created',
             entityType: 'booking',
