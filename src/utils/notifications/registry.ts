@@ -5,7 +5,16 @@ import type {
   PrefCategory,
 } from './types';
 import { getFrontendUrl } from '../frontendUrl';
-import { sendRfqReceivedEmail, sendBookingStartedEmail, sendProfessionalCompletedEmail, sendRfqRejectedEmail, sendQuotationAcceptedEmail, sendQuotationRejectedEmail } from '../emailService';
+import {
+  sendRfqReceivedEmail,
+  sendBookingStartedEmail,
+  sendProfessionalCompletedEmail,
+  sendProfessionalNewBookingEmail,
+  sendRfqRejectedEmail,
+  sendQuotationAcceptedEmail,
+  sendQuotationRejectedEmail,
+  sendNotificationEmail,
+} from '../emailService';
 
 export interface NotifyBuildResult {
   title: string;
@@ -53,7 +62,39 @@ const def = (
   audience: NotificationAudience,
   build: EventDef['build'],
   defaultEntityType?: NotificationEntityType,
-): EventDef => ({ eventKey, category, tier, audience, build, defaultEntityType });
+): EventDef => {
+  const wrappedBuild: EventDef['build'] = (ctx) => {
+    const result = build(ctx);
+    if (result.sendEmail) return result;
+    // Every event gets a real email path so email_always / always_on (and
+    // configurable-when-enabled) actually deliver mail, not only inbox/push.
+    return {
+      ...result,
+      sendEmail: async ({ email, name }) =>
+        sendNotificationEmail({
+          to: email,
+          userName: name || 'User',
+          title: result.title,
+          body: result.body,
+          ctaUrl: result.clickUrl,
+          template: eventKey.replace(/\./g, '_'),
+          relatedBooking:
+            typeof ctx.bookingId === 'string' && ctx.bookingId
+              ? ctx.bookingId
+              : undefined,
+        }),
+    };
+  };
+
+  return {
+    eventKey,
+    category,
+    tier,
+    audience,
+    build: wrappedBuild,
+    defaultEntityType,
+  };
+};
 
 /** Registry of product notification events. Handlers must use keys from this map. */
 export const NOTIFICATION_REGISTRY: Record<string, EventDef> = {
@@ -192,7 +233,7 @@ export const NOTIFICATION_REGISTRY: Record<string, EventDef> = {
   'customer.booking_started': def(
     'customer.booking_started',
     'booking_updates',
-    'email_always',
+    'always_on',
     'customer',
     (ctx) => ({
       title: 'Work has started',
@@ -213,7 +254,7 @@ export const NOTIFICATION_REGISTRY: Record<string, EventDef> = {
   'customer.completion_requested': def(
     'customer.completion_requested',
     'booking_updates',
-    'email_always',
+    'always_on',
     'customer',
     (ctx) => ({
       title: 'Completion request',
@@ -467,7 +508,7 @@ export const NOTIFICATION_REGISTRY: Record<string, EventDef> = {
   'professional.booking_created': def(
     'professional.booking_created',
     'booking_updates',
-    'email_always',
+    'always_on',
     'professional',
     (ctx) => ({
       title: 'New booking',
@@ -475,6 +516,15 @@ export const NOTIFICATION_REGISTRY: Record<string, EventDef> = {
         ? `${ctx.customerName} confirmed a booking with you.`
         : 'You have a new confirmed booking.',
       clickUrl: frontend(`/bookings/${ctx.bookingId || ''}`),
+      sendEmail: async ({ email, name }) =>
+        sendProfessionalNewBookingEmail(
+          email,
+          name,
+          String(ctx.customerName || 'A customer'),
+          String(ctx.bookingId || ''),
+          typeof ctx.amount === 'number' ? ctx.amount : undefined,
+          String(ctx.currency || 'EUR'),
+        ),
     }),
     'booking',
   ),

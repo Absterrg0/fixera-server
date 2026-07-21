@@ -352,9 +352,10 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     if (booking.payment.status === 'pending') {
       const customerUser = booking.customer ? await User.findById(booking.customer).select('email name').lean() : null;
       const professionalUser = booking.professional ? await User.findById(booking.professional).select('email name businessInfo username').lean() : null;
+      const amountPaid = (booking.payment as any)?.amount ?? convertFromStripeAmount(paymentIntent.amount, paymentIntent.currency);
+      const currency = (paymentIntent.currency || 'EUR').toUpperCase();
       try {
         if (customerUser?.email && professionalUser?.email) {
-          const amountPaid = (booking.payment as any)?.amount ?? convertFromStripeAmount(paymentIntent.amount, paymentIntent.currency);
           await sendPaymentConfirmedEmail(
             customerUser.email,
             professionalUser.email,
@@ -362,14 +363,14 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             getProfessionalDisplayName(professionalUser),
             amountPaid,
             String(booking._id),
-            (paymentIntent.currency || 'EUR').toUpperCase()
+            currency
           );
         }
       } catch (emailError: any) {
         console.error('Failed to send payment-confirmed email:', emailError?.message || emailError);
       }
 
-      // Inbox + push for professional "new booking" (independent of email delivery)
+      // Inbox + email + push for professional "new booking"
       try {
         if (professionalUser?._id) {
           const { notifyAsync } = await import('../../utils/notifications/notify');
@@ -381,6 +382,8 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             context: {
               bookingId: String(booking._id),
               customerName: customerUser?.name,
+              amount: amountPaid,
+              currency,
             },
           });
         }

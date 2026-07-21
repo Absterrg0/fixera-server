@@ -1367,6 +1367,51 @@ const sendEmail = async (
   }
 };
 
+/**
+ * Generic single-recipient notification email used by the notification registry
+ * when a dedicated template is not required.
+ */
+export const sendNotificationEmail = async (params: {
+  to: string;
+  userName: string;
+  title: string;
+  body: string;
+  ctaUrl: string;
+  ctaLabel?: string;
+  subject?: string;
+  template: string;
+  relatedBooking?: string;
+}): Promise<boolean> => {
+  const {
+    to,
+    userName,
+    title,
+    body,
+    ctaUrl,
+    ctaLabel = 'Open in Fixtract',
+    subject = `${title} - Fixtract`,
+    template,
+    relatedBooking,
+  } = params;
+
+  const content = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      ${getEmailHeader(title)}
+      <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${escapeHtml(userName)}!</h2>
+        <p style="color: #666; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(body)}</p>
+        ${ctaUrl ? buildEmailButton(ctaUrl, ctaLabel) : ''}
+        ${getEmailFooter()}
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, content, {
+    template,
+    relatedBooking,
+  });
+};
+
 // Professional receives RFQ notification
 export const sendRfqReceivedEmail = async (
   profEmail: string, profName: string, customerName: string, serviceType: string, bookingId: string
@@ -1708,29 +1753,50 @@ export const sendPaymentConfirmedEmail = async (
       </div>
     </div>
   `;
-  const profContent = `
+  // Professional "new booking" mail is sent via notify(professional.booking_created).
+  // Keep this helper customer-only so pros are not double-emailed.
+  void profEmail;
+  return sendEmail(custEmail, 'Payment Confirmed - Fixtract', custContent, {
+    template: 'payment_confirmed',
+    relatedBooking: bookingId,
+  });
+};
+
+/** Confirmed/paid booking → professional (mail for professional.booking_created). */
+export const sendProfessionalNewBookingEmail = async (
+  profEmail: string,
+  profName: string,
+  custName: string,
+  bookingId: string,
+  amount?: number,
+  currency: string = 'EUR'
+): Promise<boolean> => {
+  const link = buildBookingLink(bookingId);
+  const amountBlock =
+    typeof amount === 'number' && Number.isFinite(amount)
+      ? `<div style="background: #fff; border: 2px solid #16a34a; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+          <p style="color: #666; margin: 0 0 5px 0; font-size: 14px;">Amount</p>
+          <p style="font-size: 28px; font-weight: bold; color: #16a34a; margin: 0;">${formatCurrency(amount, currency)}</p>
+        </div>`
+      : '';
+  const content = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      ${getEmailHeader('Booking Payment Received')}
+      ${getEmailHeader('New Booking')}
       <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
         <h2 style="color: #333; margin: 0 0 20px 0;">Hello ${escapeHtml(profName)}!</h2>
         <p style="color: #666; line-height: 1.6;">
-          <strong>${escapeHtml(custName)}</strong> has paid for the booking. The booking is now confirmed and ready to schedule.
+          <strong>${escapeHtml(custName)}</strong> confirmed a booking with you. The booking is ready to schedule.
         </p>
-        <div style="background: #fff; border: 2px solid #16a34a; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-          <p style="color: #666; margin: 0 0 5px 0; font-size: 14px;">Amount</p>
-          <p style="font-size: 28px; font-weight: bold; color: #16a34a; margin: 0;">${formatCurrency(amount, currency)}</p>
-        </div>
+        ${amountBlock}
         ${buildEmailButton(link, 'View Booking', '#16a34a')}
         ${getEmailFooter()}
       </div>
     </div>
   `;
-  const meta = { template: 'payment_confirmed', relatedBooking: bookingId };
-  const [custOk, profOk] = await Promise.all([
-    sendEmail(custEmail, 'Payment Confirmed - Fixtract', custContent, meta),
-    sendEmail(profEmail, 'Booking Payment Received - Fixtract', profContent, meta),
-  ]);
-  return custOk && profOk;
+  return sendEmail(profEmail, 'New Booking - Fixtract', content, {
+    template: 'professional_booking_created',
+    relatedBooking: bookingId,
+  });
 };
 
 // Booking scheduled → customer
